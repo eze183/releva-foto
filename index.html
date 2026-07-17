@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ec3013" />
+    <meta name="description" content="Registro fotográfico de relevamientos" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Releva Foto</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">RELEVAMIENTO</p>
+          <h1>Releva Foto</h1>
+        </div>
+        <button id="newPhotoButton" class="icon-button" aria-label="Agregar foto">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </header>
+
+      <section id="galleryView" class="view active">
+        <div class="summary-card">
+          <div>
+            <p>Registro actual</p>
+            <strong id="photoCount">0 fotos</strong>
+          </div>
+          <div class="filter-wrap">
+            <button id="folderFilter" class="filter-button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="folderFilterLabel">Todas las carpetas</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="folderFilterPanel" class="filter-panel" role="listbox" hidden></div>
+          </div>
+        </div>
+
+        <div id="emptyState" class="empty-state">
+          <div class="empty-icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </div>
+          <h2>Comenzá tu relevamiento</h2>
+          <p>Sacá una foto, agregá una nota y encontrala después por vivienda, manzana o carpeta.</p>
+          <button class="primary-button" data-action="capture">Tomar primera foto</button>
+        </div>
+        <div id="photoGrid" class="photo-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="captureView" class="view">
+        <div class="view-heading">
+          <button class="back-button" data-action="back" aria-label="Volver">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div><p class="eyebrow">NUEVO REGISTRO</p><h2>Agregar fotografía</h2></div>
+        </div>
+        <div id="sourceChooser" class="source-chooser">
+          <button class="source-card" data-action="camera">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <strong>Cámara</strong><small>Tomar ahora</small>
+          </button>
+          <button class="source-card" data-action="library">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <strong>Galería</strong><small>Elegir archivo</small>
+          </button>
+        </div>
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden />
+        <input id="libraryInput" type="file" accept="image/*" hidden />
+        <form id="detailsForm" class="details-form" hidden>
+          <img id="photoPreview" class="photo-preview" alt="Vista previa de la foto seleccionada" />
+          <label>Nombre automático<input id="photoName" required /></label>
+          <div class="field-row">
+            <label>Vivienda<input id="homeNumber" inputmode="numeric" placeholder="Ej. 7" /></label>
+            <label>Manzana<input id="blockNumber" placeholder="Ej. 3" /></label>
+          </div>
+          <label>Carpeta<select id="folderName"><option value="General">General</option></select></label>
+          <button type="button" id="newFolderButton" class="text-button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            Crear carpeta nueva
+          </button>
+          <label>Nota<textarea id="photoNote" rows="3" placeholder="Observaciones del relevamiento..."></textarea></label>
+          <button type="button" id="annotateButton" class="secondary-button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            Marcar la foto
+          </button>
+          <button class="primary-button" type="submit">Guardar registro</button>
+        </form>
+      </section>
+
+      <section id="editorView" class="view editor-view">
+        <div class="view-heading compact">
+          <button class="back-button" data-action="back-to-details" aria-label="Volver">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2>Marcar fotografía</h2>
+          <button id="saveMarksButton" class="save-link">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Listo
+          </button>
+        </div>
+        <div class="canvas-wrap"><canvas id="annotationCanvas"></canvas></div>
+        <div class="editor-tools" role="toolbar" aria-label="Herramientas de marcado">
+          <button class="tool active" data-tool="arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+            <small>Flecha</small>
+          </button>
+          <button class="tool" data-tool="box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/></svg>
+            <small>Recuadro</small>
+          </button>
+          <button class="tool" data-tool="text">
+            <span class="tool-glyph">T</span>
+            <small>Texto</small>
+          </button>
+          <button class="tool" data-tool="draw">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <small>Trazo</small>
+          </button>
+          <button id="undoButton" class="tool">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+            <small>Deshacer</small>
+          </button>
+        </div>
+        <div class="color-picker" aria-label="Color de marcado">
+          <button data-color="#ec3013" class="color active" style="--color:#ec3013"></button>
+          <button data-color="#facc15" class="color" style="--color:#facc15"></button>
+          <button data-color="#22c55e" class="color" style="--color:#22c55e"></button>
+          <button data-color="#2563eb" class="color" style="--color:#2563eb"></button>
+          <button data-color="#ffffff" class="color" style="--color:#ffffff"></button>
+        </div>
+      </section>
+
+      <section id="detailView" class="view">
+        <div class="view-heading compact">
+          <button class="back-button" data-action="back" aria-label="Volver">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2>Detalle</h2>
+          <div class="detail-actions">
+            <button id="editButton" class="text-button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              Editar
+            </button>
+            <button id="deleteButton" class="delete-link">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              Eliminar
+            </button>
+          </div>
+        </div>
+        <img id="detailImage" class="detail-image" alt="Fotografía de relevamiento" />
+        <div id="detailReadView" class="detail-content"><span id="detailFolder" class="folder-pill"></span><h2 id="detailName"></h2><p id="detailNote"></p><small id="detailDate"></small></div>
+        <form id="editForm" class="details-form" hidden>
+          <label>Nombre<input id="editName" required /></label>
+          <label>Carpeta<select id="editFolder"></select></label>
+          <label>Nota<textarea id="editNote" rows="3"></textarea></label>
+          <button class="primary-button" type="submit">Guardar cambios</button>
+        </form>
+      </section>
+
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-action="gallery">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span>Registros</span>
+        </button>
+        <button class="nav-item" data-action="capture">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>Agregar</span>
+        </button>
+      </nav>
+    </main>
+    <dialog id="folderDialog">
+      <form method="dialog">
+        <h3>Carpetas</h3>
+        <ul id="folderManageList" class="folder-manage-list"></ul>
+        <input id="newFolderInput" placeholder="Ej. Manzana 3" />
+        <div class="dialog-actions"><button value="cancel">Cerrar</button><button id="confirmFolder" value="default">Crear</button></div>
+      </form>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>
