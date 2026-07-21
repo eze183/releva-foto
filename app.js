@@ -309,16 +309,28 @@ async function shareOrDownload(blob, fileName) {
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-$("#exportButton").onclick = async () => {
-  const scopeFolder = state.activeFolder;
-  const photos = scopeFolder === "all" ? state.photos : state.photos.filter((photo) => photo.folder === scopeFolder);
-  if (!photos.length) { showError("No hay fotos para exportar en esta selección."); return; }
+function renderExportFolderList() {
+  $("#exportFolderList").innerHTML = state.folders
+    .map((folder) => {
+      const count = state.photos.filter((photo) => photo.folder === folder).length;
+      return `<li><label><input type="checkbox" value="${folder}" checked> ${folder} <small>${count} ${count === 1 ? "foto" : "fotos"}</small></label></li>`;
+    })
+    .join("");
+}
+$("#exportButton").onclick = () => { renderExportFolderList(); $("#exportDialog").showModal(); };
+$("#confirmExport").onclick = async () => {
+  const checkboxes = [...$("#exportFolderList").querySelectorAll("input[type=checkbox]")];
+  const selectedFolders = checkboxes.filter((box) => box.checked).map((box) => box.value);
+  if (!selectedFolders.length) { showError("Seleccioná al menos una carpeta."); return; }
+  const photos = state.photos.filter((photo) => selectedFolders.includes(photo.folder));
+  if (!photos.length) { showError("No hay fotos para exportar en esa selección."); return; }
+  $("#exportDialog").close();
   const button = $("#exportButton");
   button.disabled = true;
   try {
     const blob = await buildExportZip(photos);
     const stamp = new Date().toISOString().slice(0, 10);
-    const scopeName = scopeFolder === "all" ? "todo" : sanitizeFileName(scopeFolder);
+    const scopeName = selectedFolders.length === state.folders.length ? "todo" : selectedFolders.length === 1 ? sanitizeFileName(selectedFolders[0]) : "seleccion";
     await shareOrDownload(blob, `releva-foto_${scopeName}_${stamp}.zip`);
   } catch (error) {
     console.error(error);
