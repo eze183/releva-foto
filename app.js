@@ -248,6 +248,86 @@ $("#deleteButton").onclick = async () => {
   }
 };
 
+// --- Exportar a .zip (todo o la carpeta que esté filtrada) ---
+let jszipPromise = null;
+function loadJSZip() {
+  if (window.JSZip) return Promise.resolve();
+  if (!jszipPromise) {
+    jszipPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "vendor/jszip.min.js";
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("No se pudo cargar la librería de exportación."));
+      document.head.appendChild(script);
+    });
+  }
+  return jszipPromise;
+}
+function sanitizeFileName(name) {
+  const clean = (name || "").replace(/[\\/:*?"<>|]+/g, "-").trim();
+  return clean || "sin-nombre";
+}
+function csvEscape(value) {
+  const s = String(value ?? "");
+  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function extensionFor(blob) {
+  if (blob.type === "image/png") return "png";
+  if (blob.type === "image/webp") return "webp";
+  return "jpg";
+}
+async function buildExportZip(photos) {
+  await loadJSZip();
+  const zip = new JSZip();
+  const usedNames = new Map();
+  const rows = [["Nombre", "Carpeta", "Nota", "Fecha"]];
+  for (const photo of photos) {
+    const folderSafe = sanitizeFileName(photo.folder);
+    const used = usedNames.get(folderSafe) || new Set();
+    const base = sanitizeFileName(photo.name);
+    const ext = extensionFor(photo.blob);
+    let fileName = `${base}.${ext}`;
+    let i = 2;
+    while (used.has(fileName)) { fileName = `${base} (${i}).${ext}`; i++; }
+    used.add(fileName); usedNames.set(folderSafe, used);
+    zip.file(`${folderSafe}/${fileName}`, photo.blob);
+    rows.push([photo.name, photo.folder, photo.note || "", formatDate(photo.createdAt)]);
+  }
+  const csv = rows.map((row) => row.map(csvEscape).join(";")).join("\r\n");
+  zip.file("registro.csv", "﻿" + csv);
+  return zip.generateAsync({ type: "blob", compression: "STORE" });
+}
+async function shareOrDownload(blob, fileName) {
+  const file = new File([blob], fileName, { type: "application/zip" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: fileName }); return; }
+    catch (error) { if (error && error.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = fileName;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+$("#exportButton").onclick = async () => {
+  const scopeFolder = state.activeFolder;
+  const photos = scopeFolder === "all" ? state.photos : state.photos.filter((photo) => photo.folder === scopeFolder);
+  if (!photos.length) { showError("No hay fotos para exportar en esta selección."); return; }
+  const button = $("#exportButton");
+  button.disabled = true;
+  try {
+    const blob = await buildExportZip(photos);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const scopeName = scopeFolder === "all" ? "todo" : sanitizeFileName(scopeFolder);
+    await shareOrDownload(blob, `releva-foto_${scopeName}_${stamp}.zip`);
+  } catch (error) {
+    console.error(error);
+    showError("No se pudo generar la exportación.");
+  } finally {
+    button.disabled = false;
+  }
+};
+
 (async function init() {
   await loadAll();
   renderFolders();

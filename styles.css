@@ -23,6 +23,7 @@ h1,h2{font-family:"Archivo",system-ui,sans-serif;font-weight:800;letter-spacing:
 .summary-card{padding:16px 0 0;display:flex;justify-content:space-between;align-items:flex-start}
 .summary-card p{margin:0 0 2px;font-size:.73rem;color:var(--muted)}
 .summary-card strong{font-family:"Archivo",sans-serif;font-size:1.1rem;font-weight:800}
+.summary-actions{display:flex;align-items:center;gap:8px}
 .filter-wrap{position:relative}
 .filter-button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:9px 11px;font:inherit;font-weight:600;font-size:.82rem;display:flex;align-items:center;gap:6px;cursor:pointer}
 .filter-panel{position:absolute;top:calc(100% + 6px);right:0;min-width:190px;background:var(--surface);border:1px solid var(--line);box-shadow:0 3px 10px #2d2b2b29;z-index:30}
