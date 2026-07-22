@@ -1,4 +1,4 @@
-const state = { photos: [], folders: ["General"], activeFolder: null, pendingImage: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null };
+const state = { photos: [], folders: ["General"], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment" };
 const $ = (selector) => document.querySelector(selector);
 const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
@@ -119,14 +119,61 @@ function showFolderView() {
 function backToFolderOrHome() {
   if (state.activeFolder) { showFolderView(); } else { renderFolderGrid(); showView("galleryView"); }
 }
-function resetCapture() { state.pendingImage = null; state.annotatedImage = null; $("#detailsForm").hidden = true; $("#sourceChooser").hidden = false; $("#detailsForm").reset(); }
+function resetCapture() {
+  if (state.pendingImage) URL.revokeObjectURL(state.pendingImage);
+  state.pendingImage = null; state.pendingBlob = null; state.annotatedImage = null;
+  $("#detailsForm").hidden = true; $("#sourceChooser").hidden = false; $("#detailsForm").reset();
+}
 function openCapture(preselectFolder) { resetCapture(); renderFolders(); if (preselectFolder) $("#folderName").value = preselectFolder; showView("captureView"); }
-function handleImage(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => { state.pendingImage = reader.result; $("#photoPreview").src = reader.result; $("#sourceChooser").hidden = true; $("#detailsForm").hidden = false; updateSuggestedName(); };
-  reader.onerror = () => showError("No se pudo leer la imagen. Probá con otra foto.");
-  reader.readAsDataURL(file);
+// Guarda la foto capturada como Blob (liviano) y usa un object URL para previsualizar.
+function setPending(blob) {
+  if (!blob) return;
+  if (state.pendingImage) URL.revokeObjectURL(state.pendingImage);
+  state.pendingBlob = blob;
+  state.pendingImage = URL.createObjectURL(blob);
+  state.annotatedImage = null;
+  $("#photoPreview").src = state.pendingImage;
+  $("#sourceChooser").hidden = true; $("#detailsForm").hidden = false;
+  updateSuggestedName();
+}
+function handleImage(file) { if (file) setPending(file); }
+
+// --- Cámara dentro de la app (getUserMedia): evita el cambio de app que en Android
+// hace que el sistema mate la página y se pierda la foto. Cae al input nativo si falla. ---
+async function openCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("#cameraInput").click(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: state.facingMode, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
+    state.cameraStream = stream;
+    $("#cameraStream").srcObject = stream;
+    $("#cameraOverlay").hidden = false;
+  } catch (error) {
+    console.error(error);
+    $("#cameraInput").click();
+  }
+}
+function closeCamera() {
+  if (state.cameraStream) { state.cameraStream.getTracks().forEach((track) => track.stop()); state.cameraStream = null; }
+  $("#cameraStream").srcObject = null;
+  $("#cameraOverlay").hidden = true;
+}
+function capturePhoto() {
+  const video = $("#cameraStream");
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) { showError("La cámara todavía no está lista. Probá de nuevo."); return; }
+  const shot = document.createElement("canvas");
+  shot.width = w; shot.height = h;
+  shot.getContext("2d").drawImage(video, 0, 0, w, h);
+  shot.toBlob((blob) => {
+    if (!blob) { showError("No se pudo capturar la foto. Probá de nuevo."); return; }
+    setPending(blob);
+    closeCamera();
+  }, "image/jpeg", 0.92);
+}
+async function flipCamera() {
+  state.facingMode = state.facingMode === "environment" ? "user" : "environment";
+  closeCamera();
+  await openCamera();
 }
 function openDetail(id) {
   const photo = state.photos.find((item) => item.id === id); if (!photo) return;
@@ -164,7 +211,7 @@ document.addEventListener("click", (event) => {
   if (action === "capture") openCapture(state.activeFolder);
   if (action === "gallery") { state.activeFolder = null; renderFolderGrid(); showView("galleryView"); }
   if (action === "back") backToFolderOrHome();
-  if (action === "camera") $("#cameraInput").click();
+  if (action === "camera") openCamera();
   if (action === "library") $("#libraryInput").click();
   if (action === "back-to-details") showView("captureView");
   const folderCard = event.target.closest("[data-folder]");
@@ -175,7 +222,10 @@ document.addEventListener("click", (event) => {
   const removeFolder = event.target.closest("[data-remove-folder]");
   if (removeFolder) removeFolderByName(removeFolder.dataset.removeFolder);
 });
-$("#newPhotoButton").onclick = () => openCapture(state.activeFolder); $("#cameraInput").onchange = (event) => handleImage(event.target.files[0]); $("#libraryInput").onchange = (event) => handleImage(event.target.files[0]);
+$("#newPhotoButton").onclick = () => openCapture(state.activeFolder);
+$("#cameraInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
+$("#libraryInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
+$("#cameraShutter").onclick = capturePhoto; $("#cameraCancel").onclick = closeCamera; $("#cameraFlip").onclick = flipCamera;
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
 $("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
 $("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); context.putImageData(state.history.at(-1), 0, 0); } };
@@ -208,8 +258,8 @@ async function removeFolderByName(name) {
 $("#detailsForm").onsubmit = async (event) => {
   event.preventDefault();
   try {
-    const dataUrl = state.annotatedImage || state.pendingImage;
-    const blob = await (await fetch(dataUrl)).blob();
+    const blob = state.annotatedImage ? await (await fetch(state.annotatedImage)).blob() : state.pendingBlob;
+    if (!blob) { showError("No hay ninguna foto para guardar. Volvé a tomarla."); return; }
     const photo = { id: crypto.randomUUID(), blob, name: $("#photoName").value.trim(), folder: $("#folderName").value, note: $("#photoNote").value.trim(), createdAt: new Date().toISOString() };
     await idbPutPhoto(photo);
     state.photos.push(photo);
