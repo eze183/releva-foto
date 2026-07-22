@@ -70,7 +70,8 @@ h1,h2{font-family:"Archivo",system-ui,sans-serif;font-weight:800;letter-spacing:
 .photo-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-bottom:1px solid var(--line);filter:grayscale(1) contrast(1.08)}
 .photo-card div{padding:9px 10px}
 .photo-card strong{font-size:.76rem;font-weight:800;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.folder-grid{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.folder-create-button{margin-top:18px}
+.folder-grid{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .folder-card{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);background:var(--surface);padding:14px;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
 .folder-card div{display:flex;flex-direction:column;gap:3px}
 .folder-card strong{font-size:.92rem;font-weight:800}

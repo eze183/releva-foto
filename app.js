@@ -229,7 +229,9 @@ $("#cameraShutter").onclick = capturePhoto; $("#cameraCancel").onclick = closeCa
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
 $("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
 $("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); context.putImageData(state.history.at(-1), 0, 0); } };
-$("#newFolderButton").onclick = () => { renderFolderManageList(); $("#folderDialog").showModal(); };
+function openFolderManageDialog() { renderFolderManageList(); $("#folderDialog").showModal(); }
+$("#newFolderButton").onclick = openFolderManageDialog;
+$("#newFolderButtonHome").onclick = openFolderManageDialog;
 $("#confirmFolder").onclick = async (event) => {
   const name = $("#newFolderInput").value.trim();
   if (!name) { event.preventDefault(); return; }
@@ -237,7 +239,7 @@ $("#confirmFolder").onclick = async (event) => {
     state.folders.push(name);
     try { await idbSetFolders(state.folders); } catch (error) { console.error(error); showError("No se pudo guardar la carpeta nueva."); }
   }
-  renderFolders(); $("#folderName").value = name; $("#newFolderInput").value = "";
+  renderFolders(); renderFolderGrid(); $("#folderName").value = name; $("#newFolderInput").value = "";
 };
 async function removeFolderByName(name) {
   if (name === "General") return;
