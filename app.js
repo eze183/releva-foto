@@ -1,6 +1,6 @@
-const state = { photos: [], folders: ["General"], activeFolder: "all", filterOpen: false, pendingImage: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null };
+const state = { photos: [], folders: ["General"], activeFolder: null, pendingImage: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null };
 const $ = (selector) => document.querySelector(selector);
-const views = ["galleryView", "captureView", "editorView", "detailView"];
+const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
 function showError(message) { alert(message); }
 
@@ -80,7 +80,8 @@ async function loadAll() {
 
 function showView(id) {
   views.forEach((view) => $("#" + view).classList.toggle("active", view === id));
-  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.action === (id === "galleryView" ? "gallery" : "capture")));
+  const navAction = id === "galleryView" || id === "folderView" ? "gallery" : id === "captureView" ? "capture" : null;
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.action === navAction));
 }
 function formatDate(date) { return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(date)); }
 function fileName() {
@@ -98,27 +99,28 @@ function renderFolderManageList() {
     .map((folder) => `<li><span>${folder}</span><button type="button" data-remove-folder="${folder}" aria-label="Borrar carpeta ${folder}">×</button></li>`)
     .join("") || `<li><span>No hay carpetas propias todavía.</span></li>`;
 }
-function renderFolderFilterPanel() {
-  const options = [{ value: "all", label: "Todas las carpetas" }, ...state.folders.map((folder) => ({ value: folder, label: folder }))];
-  $("#folderFilterPanel").innerHTML = options
-    .map((opt) => `<button type="button" data-filter-folder="${opt.value}" class="${opt.value === state.activeFolder ? "active" : ""}">${opt.label}</button>`)
+function renderFolderGrid() {
+  $("#photoCount").textContent = `${state.photos.length} ${state.photos.length === 1 ? "foto" : "fotos"}`;
+  $("#folderGrid").innerHTML = state.folders
+    .map((folder) => {
+      const count = state.photos.filter((photo) => photo.folder === folder).length;
+      return `<button class="folder-card" data-folder="${folder}"><div><strong>${folder}</strong><small>${count} ${count === 1 ? "foto" : "fotos"}</small></div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+    })
     .join("");
-  $("#folderFilterLabel").textContent = state.activeFolder === "all" ? "Todas las carpetas" : state.activeFolder;
 }
-function setFilterOpen(open) {
-  state.filterOpen = open;
-  $("#folderFilterPanel").hidden = !open;
-  $("#folderFilter").setAttribute("aria-expanded", String(open));
+function showFolderView() {
+  const folder = state.activeFolder;
+  const photos = state.photos.filter((photo) => photo.folder === folder).slice().reverse();
+  $("#folderViewTitle").textContent = folder;
+  $("#emptyState").hidden = photos.length > 0;
+  $("#photoGrid").innerHTML = photos.map((photo) => `<button class="photo-card" data-id="${photo.id}"><img src="${urlFor(photo)}" alt="${photo.name}"><div><strong>${photo.name}</strong></div></button>`).join("");
+  showView("folderView");
 }
-function renderGallery() {
-  renderFolderFilterPanel();
-  const grid = $("#photoGrid"); $("#photoCount").textContent = `${state.photos.length} ${state.photos.length === 1 ? "foto" : "fotos"}`;
-  $("#emptyState").hidden = state.photos.length > 0;
-  const filtered = state.activeFolder === "all" ? state.photos : state.photos.filter((photo) => photo.folder === state.activeFolder);
-  grid.innerHTML = filtered.slice().reverse().map((photo) => `<button class="photo-card" data-id="${photo.id}"><img src="${urlFor(photo)}" alt="${photo.name}"><div><strong>${photo.name}</strong><span class="folder-pill">${photo.folder}</span></div></button>`).join("");
+function backToFolderOrHome() {
+  if (state.activeFolder) { showFolderView(); } else { renderFolderGrid(); showView("galleryView"); }
 }
 function resetCapture() { state.pendingImage = null; state.annotatedImage = null; $("#detailsForm").hidden = true; $("#sourceChooser").hidden = false; $("#detailsForm").reset(); }
-function openCapture() { resetCapture(); renderFolders(); showView("captureView"); }
+function openCapture(preselectFolder) { resetCapture(); renderFolders(); if (preselectFolder) $("#folderName").value = preselectFolder; showView("captureView"); }
 function handleImage(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -129,6 +131,7 @@ function handleImage(file) {
 function openDetail(id) {
   const photo = state.photos.find((item) => item.id === id); if (!photo) return;
   state.activePhoto = photo;
+  state.activeFolder = photo.folder;
   $("#detailImage").src = urlFor(photo);
   $("#detailName").textContent = photo.name;
   $("#detailFolder").textContent = photo.folder;
@@ -158,23 +161,21 @@ canvas.addEventListener("pointerup", () => { if (!state.drawing) return; state.d
 
 document.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
-  if (action === "capture") openCapture();
-  if (action === "gallery" || action === "back") { renderGallery(); showView("galleryView"); }
+  if (action === "capture") openCapture(state.activeFolder);
+  if (action === "gallery") { state.activeFolder = null; renderFolderGrid(); showView("galleryView"); }
+  if (action === "back") backToFolderOrHome();
   if (action === "camera") $("#cameraInput").click();
   if (action === "library") $("#libraryInput").click();
   if (action === "back-to-details") showView("captureView");
+  const folderCard = event.target.closest("[data-folder]");
+  if (folderCard) { state.activeFolder = folderCard.dataset.folder; showFolderView(); return; }
   const card = event.target.closest(".photo-card"); if (card) openDetail(card.dataset.id);
   const tool = event.target.closest("[data-tool]"); if (tool) { state.tool = tool.dataset.tool; document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.toggle("active", button === tool)); }
   const color = event.target.closest("[data-color]"); if (color) { state.color = color.dataset.color; document.querySelectorAll(".color").forEach((button) => button.classList.toggle("active", button === color)); }
   const removeFolder = event.target.closest("[data-remove-folder]");
   if (removeFolder) removeFolderByName(removeFolder.dataset.removeFolder);
-  const filterToggle = event.target.closest("#folderFilter");
-  if (filterToggle) { setFilterOpen(!state.filterOpen); return; }
-  const filterOption = event.target.closest("[data-filter-folder]");
-  if (filterOption) { state.activeFolder = filterOption.dataset.filterFolder; setFilterOpen(false); renderGallery(); return; }
-  if (state.filterOpen && !event.target.closest(".filter-wrap")) setFilterOpen(false);
 });
-$("#newPhotoButton").onclick = openCapture; $("#cameraInput").onchange = (event) => handleImage(event.target.files[0]); $("#libraryInput").onchange = (event) => handleImage(event.target.files[0]);
+$("#newPhotoButton").onclick = () => openCapture(state.activeFolder); $("#cameraInput").onchange = (event) => handleImage(event.target.files[0]); $("#libraryInput").onchange = (event) => handleImage(event.target.files[0]);
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
 $("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
 $("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); context.putImageData(state.history.at(-1), 0, 0); } };
@@ -196,6 +197,7 @@ async function removeFolderByName(name) {
     for (const photo of affected) { photo.folder = "General"; await idbPutPhoto(photo); }
     state.folders = state.folders.filter((folder) => folder !== name);
     await idbSetFolders(state.folders);
+    if (state.activeFolder === name) state.activeFolder = "General";
     renderFolders(); renderFolderManageList();
     if (state.activePhoto && state.activePhoto.folder === "General") $("#detailFolder").textContent = "General";
   } catch (error) {
@@ -211,8 +213,8 @@ $("#detailsForm").onsubmit = async (event) => {
     const photo = { id: crypto.randomUUID(), blob, name: $("#photoName").value.trim(), folder: $("#folderName").value, note: $("#photoNote").value.trim(), createdAt: new Date().toISOString() };
     await idbPutPhoto(photo);
     state.photos.push(photo);
-    renderGallery();
-    showView("galleryView");
+    state.activeFolder = photo.folder;
+    showFolderView();
   } catch (error) {
     console.error(error);
     showError("No se pudo guardar la foto. Verificá el espacio disponible en el navegador.");
@@ -226,9 +228,9 @@ $("#editForm").onsubmit = async (event) => {
   try {
     await idbPutPhoto(updated);
     Object.assign(photo, updated);
+    state.activeFolder = photo.folder;
     $("#detailName").textContent = photo.name; $("#detailFolder").textContent = photo.folder; $("#detailNote").textContent = photo.note || "Sin observaciones.";
     $("#editForm").hidden = true; $("#detailReadView").hidden = false;
-    renderGallery();
   } catch (error) {
     console.error(error);
     showError("No se pudieron guardar los cambios.");
@@ -240,8 +242,7 @@ $("#deleteButton").onclick = async () => {
     await idbDeletePhoto(state.activePhoto.id);
     releaseUrl(state.activePhoto.id);
     state.photos = state.photos.filter((item) => item.id !== state.activePhoto.id);
-    renderGallery();
-    showView("galleryView");
+    showFolderView();
   } catch (error) {
     console.error(error);
     showError("No se pudo eliminar la foto.");
@@ -343,6 +344,6 @@ $("#confirmExport").onclick = async () => {
 (async function init() {
   await loadAll();
   renderFolders();
-  renderGallery();
+  renderFolderGrid();
 })();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
