@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const contentTypes = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png", ".woff2": "font/woff2" };
 http.createServer((request, response) => {
   const requestedPath = request.url === "/" ? "/index.html" : request.url.split("?")[0];
   const filePath = path.join(__dirname, requestedPath);
