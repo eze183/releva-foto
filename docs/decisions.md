@@ -181,3 +181,47 @@ explícita para `.details-form`.
 **Implicación para el futuro**: si se agrega un nuevo bloque que se muestra/oculta con
 `hidden` y tiene una clase con `display` propio, replicar el mismo patrón
 (`.esa-clase[hidden]{display:none}`) desde el principio.
+
+---
+
+## 9. `touch-action:manipulation` no bloquea el pinch-zoom nativo del navegador
+
+**Decisión/hallazgo**: la superposición de cámara (`#cameraOverlay`) y el `<video>`
+usan `touch-action:none`, no `manipulation`, reforzado con `preventDefault()` en los
+listeners de touch (registrados como no-pasivos).
+
+**Por qué se documenta**: el usuario reportó que, al hacer zoom con dos dedos en la
+cámara, el botón de disparo se movía fuera de pantalla y no se podía tocar. La causa
+no era la lógica de zoom por hardware (`MediaStreamTrack.applyConstraints`), que
+funcionaba bien — era que `touch-action:manipulation` (usado en la primera versión)
+**permite** el pinch-zoom nativo del navegador (sólo bloquea el double-tap-zoom), así
+que el gesto disparaba dos zooms en simultáneo: el nuestro (por hardware) y el del
+navegador (escalando visualmente toda la página, botón de disparo incluido). Cambiar
+a `touch-action:none` bloquea el gesto nativo del todo y deja el zoom exclusivamente
+en manos del código de la app.
+
+**Implicación para el futuro**: cualquier gesto multitáctil propio (pinch, swipe)
+sobre un elemento de pantalla completa necesita `touch-action:none` explícito, no
+`manipulation` — este último es para gestos de un solo dedo (tap, pan) donde sólo se
+quiere sacar el delay del double-tap-zoom.
+
+---
+
+## 10. La carpeta "General" es la única carpeta protegida (no se puede borrar, mover
+     ni renombrar)
+
+**Decisión**: reafirmada explícitamente por el usuario en la sesión 4, cuando notó
+que no se podía borrar "General" y preguntó si era un bug. No lo es — es la carpeta
+de respaldo donde caen las fotos de cualquier carpeta que se elimine (ver
+implementación en `removeFolderByName()`, `app.js`). Si se pudiera borrar también,
+haría falta definir un nuevo destino de respaldo, lo cual el usuario decidió no
+necesitar.
+
+**Por qué**: sin una carpeta de respaldo garantizada, borrar una carpeta con fotos
+requeriría siempre pedirle al usuario un destino en el momento, complicando el flujo
+más común (borrar una carpeta vacía o ya vaciada a mano).
+
+**Implicación para el futuro**: "General" queda exenta de las tres operaciones nuevas
+de la sesión 4 (selección múltiple para mover, renombrar, borrar). Si en el futuro se
+pide poder borrarla, hay que definir explícitamente a dónde van sus fotos y las de
+futuras carpetas eliminadas — no es un cambio menor.

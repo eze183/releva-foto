@@ -130,3 +130,62 @@ la foto; (3) poder crear carpetas desde la pantalla principal.
 resuelto de raíz (no un parche), y la app funciona 100% offline desde la primera
 carga (excepto la primerísima visita, que necesita red para que el service worker
 precachee todo).
+
+---
+
+## Sesión 4 — Zoom de cámara, subcarpetas anidadas y ajustes de carpetas (24/07/2026)
+
+**Disparador**: el usuario probó la app real en el celular y reportó cinco pedidos en
+la misma jornada: (1) no se podía hacer zoom en la cámara; (2) no se podían renombrar
+carpetas; (3) las fotos se veían en blanco y negro dentro de la app (pero bien al
+exportar); (4) quería borrar carpetas desde la pantalla principal manteniendo
+presionado; (5) quería un botón de seleccionar/deseleccionar todo en exportar.
+Se implementaron los cinco. Al probarlos, el usuario reportó dos problemas nuevos: el
+botón de disparo se movía fuera de pantalla al hacer zoom, y pidió poder agrupar
+varias carpetas dentro de otra.
+
+**Se hizo**:
+- **Fotos a color**: se sacó el filtro `grayscale(1) contrast(1.08)` que aplicaba el
+  diseño Modernist a las fotos (preview, grilla, detalle) — era una elección de
+  diseño intencional de la sesión 1, pero el usuario prefirió verlas a color en la
+  app (igual que se ven al exportar, donde nunca se aplicó el filtro).
+- **Renombrar y borrar carpetas**: botón ✎ junto a cada carpeta (excepto "General",
+  que se mantiene protegida a pedido explícito del usuario — ver `docs/decisions.md`)
+  en el diálogo de carpetas.
+- **Zoom de cámara — dos iteraciones**:
+  1. Primera versión: zoom por hardware (`videoTrack.applyConstraints({zoom})`)
+     controlado con gesto de pinch sobre el `<video>`.
+  2. El usuario reportó que el botón de disparo se movía fuera de pantalla al hacer
+     zoom. Causa real: `touch-action:manipulation` en el CSS del video permite el
+     pinch-zoom **nativo del navegador** (zoom de toda la página) en paralelo al
+     zoom por JS — no era un bug de la lógica de zoom, sino que el gesto nativo
+     escalaba visualmente toda la superposición de cámara, botón incluido. Se
+     corrigió con `touch-action:none` en el video y el overlay completo, más
+     `preventDefault()` en los handlers de touch (no-pasivos) como refuerzo.
+- **Subcarpetas anidadas**: a pedido del usuario, "mover carpetas dentro de otras" se
+  resolvió como jerarquía real (no como fusión de fotos) — las carpetas pasaron de
+  lista plana (`["General", "Manzana Test"]`) a lista de objetos
+  `{name, parent}`, con migración automática y silenciosa desde el formato viejo
+  (tanto en IndexedDB como en la ruta de import desde `localStorage`). Se agregó:
+  - Navegación con "subir un nivel" (no directo a home) desde una carpeta anidada.
+  - Botón "Crear subcarpeta" dentro de una carpeta, que precarga esa carpeta como
+    contenedora.
+  - Modo de selección múltiple de carpetas (mantener presionada una entra en el
+    modo, tocar otras suma/saca de la selección), con una barra de acciones fija
+    abajo: "Mover a...", "Eliminar", "Cancelar".
+  - Al mover, el diálogo de destino excluye las carpetas seleccionadas y todos sus
+    descendientes (evita crear ciclos, ej. mover "Barrio Norte" dentro de su propia
+    subcarpeta "Manzana 3").
+  - Al borrar una carpeta con subcarpetas, estas se **promueven un nivel** (pasan a
+    ser hijas del padre de la carpeta borrada) en vez de perderse o also borrarse en
+    cascada — sus fotos no se tocan. Las fotos directas de la carpeta borrada sí
+    pasan a "General", como ya funcionaba antes.
+  - "General" queda exenta de selección múltiple, mover y renombrar/borrar — sigue
+    siendo la única carpeta protegida (decisión reafirmada explícitamente por el
+    usuario en esta sesión, ver `docs/decisions.md`).
+- Cuatro bumps de `sw.js` en esta sesión (v10 a v13).
+
+**Resultado**: los cinco pedidos originales resueltos, más una jerarquía de carpetas
+real que no existía antes, verificados en el Browser pane (creación de subcarpetas,
+navegación multinivel, mover con exclusión de ciclos, borrado con promoción de
+hijos, migración desde datos con formato viejo) sin errores de consola.

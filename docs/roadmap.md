@@ -5,8 +5,8 @@
 > sesión. Este archivo es el estado *actual* — resume qué está hecho, qué falta y qué
 > ideas quedaron abiertas sin comprometerse a implementarlas.
 
-_Última actualización: sesión del 22/07/2026 (navegación por carpetas, cámara in-app,
-fuente offline, crear carpeta desde la pantalla principal)._
+_Última actualización: sesión del 24/07/2026 (zoom de cámara, fotos a color,
+subcarpetas anidadas, mover/borrar/renombrar carpetas)._
 
 ## Estado actual — qué está implementado y verificado
 
@@ -21,11 +21,21 @@ fuente offline, crear carpeta desde la pantalla principal)._
 - [x] Almacenamiento en **IndexedDB** (fotos como `Blob`), con migración automática
       desde la versión anterior en `localStorage`.
 - [x] Editar nombre/carpeta/nota de una foto ya guardada.
-- [x] Crear carpetas desde el formulario de agregar foto **y** desde la pantalla
-      principal; borrar una carpeta reasigna sus fotos a "General".
-- [x] Navegación por carpetas: la pantalla principal lista carpetas (con conteo), hay
-      que entrar a una para ver sus fotos. Agregar una foto desde adentro de una
+- [x] Crear carpetas desde el formulario de agregar foto, la pantalla principal **y**
+      desde dentro de otra carpeta (como subcarpeta); renombrar y borrar carpetas
+      (excepto "General", protegida a propósito); borrar una carpeta reasigna sus
+      fotos directas a "General" y promueve sus subcarpetas un nivel.
+- [x] **Subcarpetas anidadas**: las carpetas forman una jerarquía real (no una lista
+      plana), con navegación "subir un nivel" y modo de selección múltiple
+      (mantener presionada una carpeta) para mover varias a la vez dentro de otra,
+      con protección contra ciclos (no se puede mover una carpeta dentro de sí misma
+      o de su propia subcarpeta).
+- [x] Navegación por carpetas: la pantalla principal lista carpetas de nivel
+      principal (con conteo recursivo incluyendo subcarpetas), hay que entrar a una
+      para ver sus subcarpetas y fotos. Agregar una foto desde adentro de una
       carpeta precarga esa carpeta en el formulario.
+- [x] Cámara con zoom táctil (pinch), usando el zoom de hardware del sensor cuando el
+      dispositivo lo soporta (`MediaStreamTrack.applyConstraints`).
 - [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) con selección de qué carpetas
       incluir (checkboxes, todas tildadas por defecto) — organiza por subcarpeta y
       agrega un `registro.csv`. Comparte vía `navigator.share` si está disponible, si
@@ -39,8 +49,9 @@ fuente offline, crear carpeta desde la pantalla principal)._
       tiempo de uso.
 - [x] Publicada en GitHub Pages (`https://eze183.github.io/releva-foto/`), con deploy
       automático vía GitHub Actions en cada push a `master`.
-- [x] Diseño "Modernist" (acento rojo, esquinas rectas, fotos en escala de grises,
-      tipografía Archivo) aplicado a toda la UI.
+- [x] Diseño "Modernist" (acento rojo, esquinas rectas, tipografía Archivo) aplicado
+      a toda la UI. Las fotos se ven a color (el filtro de escala de grises de la
+      sesión 1 se sacó a pedido del usuario en la sesión 4).
 
 ## Pendiente de confirmar por el usuario
 
