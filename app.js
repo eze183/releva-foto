@@ -1,4 +1,4 @@
-const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false };
+const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false, photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null };
 const $ = (selector) => document.querySelector(selector);
 const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
@@ -136,7 +136,7 @@ function showFolderView() {
   const photos = state.photos.filter((photo) => photo.folder === folder).slice().reverse();
   $("#folderViewTitle").textContent = folder;
   $("#emptyState").hidden = photos.length > 0 || subfolders.length > 0;
-  $("#photoGrid").innerHTML = photos.map((photo) => `<button class="photo-card" data-id="${photo.id}"><img src="${urlFor(photo)}" alt="${photo.name}"><div><strong>${photo.name}</strong></div></button>`).join("");
+  $("#photoGrid").innerHTML = photos.map((photo) => `<button class="photo-card${state.photoSelection.has(photo.id) ? " selected" : ""}" data-id="${photo.id}"><img src="${urlFor(photo)}" alt="${photo.name}"><div><strong>${photo.name}</strong></div></button>`).join("");
   showView("folderView");
 }
 function backToFolderOrHome() {
@@ -272,7 +272,12 @@ document.addEventListener("click", (event) => {
     if (state.folderSelectMode) { if (folder !== "General") toggleFolderSelection(folder); return; }
     state.activeFolder = folder; showFolderView(); return;
   }
-  const card = event.target.closest(".photo-card"); if (card) openDetail(card.dataset.id);
+  const card = event.target.closest(".photo-card");
+  if (card) {
+    if (longPressTriggered) { longPressTriggered = false; return; }
+    if (state.photoSelectMode) { togglePhotoSelection(card.dataset.id); return; }
+    openDetail(card.dataset.id); return;
+  }
   const tool = event.target.closest("[data-tool]"); if (tool) { state.tool = tool.dataset.tool; document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.toggle("active", button === tool)); }
   const color = event.target.closest("[data-color]"); if (color) { state.color = color.dataset.color; document.querySelectorAll(".color").forEach((button) => button.classList.toggle("active", button === color)); }
   const removeFolder = event.target.closest("[data-remove-folder]");
@@ -281,20 +286,26 @@ document.addEventListener("click", (event) => {
   if (renameFolder) renameFolderByName(renameFolder.dataset.renameFolder);
   const moveTarget = event.target.closest("[data-move-target]");
   if (moveTarget) moveSelectedFoldersTo(moveTarget.dataset.moveTarget || null);
+  const photoTarget = event.target.closest("[data-photo-target]");
+  if (photoTarget) applyPhotoTarget(photoTarget.dataset.photoTarget);
 });
 let longPressTimer = null;
 let longPressTriggered = false;
 let longPressStartPos = null;
 document.addEventListener("pointerdown", (e) => {
-  const card = e.target.closest(".folder-card");
+  const card = e.target.closest(".folder-card, .photo-card");
   if (!card) return;
   longPressTriggered = false;
   longPressStartPos = { x: e.clientX, y: e.clientY };
   longPressTimer = setTimeout(() => {
     longPressTriggered = true;
-    const folder = card.dataset.folder;
-    if (folder === "General") return;
-    toggleFolderSelection(folder);
+    if (card.classList.contains("folder-card")) {
+      const folder = card.dataset.folder;
+      if (folder === "General") return;
+      toggleFolderSelection(folder);
+    } else {
+      togglePhotoSelection(card.dataset.id);
+    }
   }, 550);
 });
 document.addEventListener("pointerup", () => clearTimeout(longPressTimer));
@@ -342,6 +353,77 @@ async function moveSelectedFoldersTo(target) {
   try { await idbSetFolders(state.folders); } catch (error) { console.error(error); showError("No se pudo mover la carpeta."); }
   $("#moveFolderDialog").close();
   exitFolderSelectMode();
+}
+function togglePhotoSelection(id) {
+  if (state.photoSelection.has(id)) state.photoSelection.delete(id); else state.photoSelection.add(id);
+  if (state.photoSelection.size === 0) { exitPhotoSelectMode(); return; }
+  state.photoSelectMode = true;
+  renderPhotoSelectBar();
+  showFolderView();
+}
+function renderPhotoSelectBar() {
+  const n = state.photoSelection.size;
+  $("#photoSelectBar").hidden = !state.photoSelectMode;
+  $("#photoSelectCount").textContent = `${n} ${n === 1 ? "foto seleccionada" : "fotos seleccionadas"}`;
+}
+function exitPhotoSelectMode() {
+  state.photoSelection.clear();
+  state.photoSelectMode = false;
+  renderPhotoSelectBar();
+  if ($("#folderView").classList.contains("active")) showFolderView();
+}
+$("#photoSelectCancel").onclick = exitPhotoSelectMode;
+$("#photoSelectDelete").onclick = async () => {
+  const ids = [...state.photoSelection];
+  if (!ids.length) return;
+  const label = ids.length > 1 ? `las ${ids.length} fotos seleccionadas` : "esta foto";
+  if (!confirm(`¿Eliminar ${label}?`)) return;
+  try {
+    for (const id of ids) { await idbDeletePhoto(id); releaseUrl(id); }
+    state.photos = state.photos.filter((photo) => !ids.includes(photo.id));
+    exitPhotoSelectMode();
+    renderFolderGrid();
+  } catch (error) {
+    console.error(error);
+    showError("No se pudieron eliminar las fotos.");
+  }
+};
+function openPhotoTargetDialog(mode) {
+  state.photoMoveMode = mode;
+  $("#photoTargetTitle").textContent = mode === "copy" ? "Copiar a" : "Mover a";
+  $("#photoTargetList").innerHTML = orderedFolders()
+    .map(({ name, depth }) => `<li><button type="button" data-photo-target="${name}">${"　".repeat(depth)}${name}</button></li>`)
+    .join("");
+  $("#photoTargetDialog").showModal();
+}
+$("#photoSelectMove").onclick = () => openPhotoTargetDialog("move");
+$("#photoSelectCopy").onclick = () => openPhotoTargetDialog("copy");
+async function applyPhotoTarget(target) {
+  const ids = [...state.photoSelection];
+  try {
+    if (state.photoMoveMode === "copy") {
+      for (const id of ids) {
+        const photo = state.photos.find((p) => p.id === id);
+        if (!photo) continue;
+        const copy = { ...photo, id: crypto.randomUUID(), folder: target };
+        await idbPutPhoto(copy);
+        state.photos.push(copy);
+      }
+    } else {
+      for (const id of ids) {
+        const photo = state.photos.find((p) => p.id === id);
+        if (!photo) continue;
+        photo.folder = target;
+        await idbPutPhoto(photo);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    showError("No se pudo completar la operación.");
+  }
+  $("#photoTargetDialog").close();
+  exitPhotoSelectMode();
+  renderFolderGrid();
 }
 $("#newPhotoButton").onclick = () => openCapture(state.activeFolder);
 $("#cameraInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };

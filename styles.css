@@ -100,11 +100,12 @@ dialog input{margin-top:10px}
 .export-list small{color:var(--muted);margin-left:auto}
 .export-toggle{display:flex;gap:12px;margin-bottom:8px}
 .folder-card.selected{border-color:var(--accent);background:var(--accent-100)}
-#moveFolderList button{width:100%;text-align:left;color:var(--ink);font-weight:600;font-size:.85rem;padding:4px}
-.folder-select-bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:620px;background:var(--ink-900);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:70}
+.photo-card.selected{outline:3px solid var(--accent);outline-offset:-3px}
+#moveFolderList button,#photoTargetList button{width:100%;text-align:left;color:var(--ink);font-weight:600;font-size:.85rem;padding:4px}
+.folder-select-bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:620px;background:var(--ink-900);color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:70}
 .folder-select-bar[hidden]{display:none}
 .folder-select-bar span{font-size:.78rem;font-weight:700}
-.folder-select-actions{display:flex;gap:14px}
+.folder-select-actions{display:flex;flex-wrap:wrap;gap:10px 14px}
 .folder-select-actions button{border:0;background:transparent;color:#fff;font:inherit;font-weight:800;font-size:.78rem;cursor:pointer;padding:0}
 .folder-select-actions .delete-link{color:#ff8a70}
 .folder-manage-actions{display:flex;gap:6px}

@@ -230,6 +230,22 @@
         <button type="button" id="folderSelectCancel">Cancelar</button>
       </div>
     </div>
+    <dialog id="photoTargetDialog">
+      <form method="dialog">
+        <h3 id="photoTargetTitle">Mover a</h3>
+        <ul id="photoTargetList" class="folder-manage-list"></ul>
+        <div class="dialog-actions"><button value="cancel">Cancelar</button></div>
+      </form>
+    </dialog>
+    <div id="photoSelectBar" class="folder-select-bar" hidden>
+      <span id="photoSelectCount">0 fotos seleccionadas</span>
+      <div class="folder-select-actions">
+        <button type="button" id="photoSelectMove">Mover a...</button>
+        <button type="button" id="photoSelectCopy">Copiar a...</button>
+        <button type="button" id="photoSelectDelete" class="delete-link">Eliminar</button>
+        <button type="button" id="photoSelectCancel">Cancelar</button>
+      </div>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
