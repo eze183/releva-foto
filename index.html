@@ -42,11 +42,17 @@
 
       <section id="folderView" class="view">
         <div class="view-heading">
-          <button class="back-button" data-action="gallery" aria-label="Volver a carpetas">
+          <button class="back-button" data-action="up" aria-label="Volver">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <div><p class="eyebrow">CARPETA</p><h2 id="folderViewTitle">General</h2></div>
         </div>
+
+        <div id="subfolderGrid" class="folder-grid" aria-live="polite"></div>
+        <button id="newFolderButtonFolder" class="text-button folder-create-button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          Crear subcarpeta
+        </button>
 
         <div id="emptyState" class="empty-state">
           <div class="empty-icon">
@@ -205,9 +211,25 @@
         <h3>Carpetas</h3>
         <ul id="folderManageList" class="folder-manage-list"></ul>
         <input id="newFolderInput" placeholder="Ej. Manzana 3" />
+        <select id="newFolderParent"><option value="">— Nivel principal —</option></select>
         <div class="dialog-actions"><button value="cancel">Cerrar</button><button id="confirmFolder" value="default">Crear</button></div>
       </form>
     </dialog>
+    <dialog id="moveFolderDialog">
+      <form method="dialog">
+        <h3>Mover a</h3>
+        <ul id="moveFolderList" class="folder-manage-list"></ul>
+        <div class="dialog-actions"><button value="cancel">Cancelar</button></div>
+      </form>
+    </dialog>
+    <div id="folderSelectBar" class="folder-select-bar" hidden>
+      <span id="folderSelectCount">0 carpetas seleccionadas</span>
+      <div class="folder-select-actions">
+        <button type="button" id="folderSelectMove">Mover a...</button>
+        <button type="button" id="folderSelectDelete" class="delete-link">Eliminar</button>
+        <button type="button" id="folderSelectCancel">Cancelar</button>
+      </div>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>

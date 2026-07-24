@@ -1,4 +1,4 @@
-const state = { photos: [], folders: ["General"], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment" };
+const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false };
 const $ = (selector) => document.querySelector(selector);
 const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
@@ -49,7 +49,8 @@ async function migrateFromLocalStorage() {
       const blob = await (await fetch(photo.image)).blob();
       await idbPutPhoto({ id: photo.id, name: photo.name, folder: photo.folder, note: photo.note, createdAt: photo.createdAt, blob });
     }
-    await idbSetFolders(data.folders && data.folders.length ? data.folders : ["General"]);
+    const folderNames = data.folders && data.folders.length ? data.folders : ["General"];
+    await idbSetFolders(folderNames.map((name) => ({ name, parent: null })));
     localStorage.removeItem("releva-fotos");
   } catch (error) {
     console.warn("No se pudo migrar el almacenamiento anterior:", error);
@@ -69,14 +70,28 @@ async function loadAll() {
   try {
     await migrateFromLocalStorage();
     state.photos = await idbGetAllPhotos();
-    const folders = await idbGetFolders();
-    state.folders = folders && folders.length ? folders : ["General"];
-    if (!folders) await idbSetFolders(state.folders);
+    let folders = await idbGetFolders();
+    let needsSave = false;
+    if (!folders || !folders.length) { folders = [{ name: "General", parent: null }]; needsSave = true; }
+    else if (typeof folders[0] === "string") { folders = folders.map((name) => ({ name, parent: null })); needsSave = true; }
+    state.folders = folders;
+    if (needsSave) await idbSetFolders(state.folders);
   } catch (error) {
     console.error(error);
     showError("No se pudo abrir el almacenamiento local. Los registros previos podrían no cargar.");
   }
 }
+function childFolders(parentName) { return state.folders.filter((f) => f.parent === parentName).map((f) => f.name); }
+function folderObj(name) { return state.folders.find((f) => f.name === name); }
+function descendantsOf(name) { const direct = childFolders(name); return direct.concat(direct.flatMap((n) => descendantsOf(n))); }
+function countPhotosRecursive(name) { const names = [name, ...descendantsOf(name)]; return state.photos.filter((p) => names.includes(p.folder)).length; }
+function orderedFolders() {
+  const result = [];
+  function walk(parent, depth) { childFolders(parent).forEach((name) => { result.push({ name, depth }); walk(name, depth + 1); }); }
+  walk(null, 0);
+  return result;
+}
+function folderOptionsHTML() { return orderedFolders().map(({ name, depth }) => `<option value="${name}">${"　".repeat(depth)}${name}</option>`).join(""); }
 
 function showView(id) {
   views.forEach((view) => $("#" + view).classList.toggle("active", view === id));
@@ -90,34 +105,48 @@ function fileName() {
 }
 function updateSuggestedName() { $("#photoName").value = fileName(); }
 function renderFolders() {
-  $("#folderName").innerHTML = state.folders.map((folder) => `<option>${folder}</option>`).join("");
-  $("#editFolder").innerHTML = state.folders.map((folder) => `<option>${folder}</option>`).join("");
+  $("#folderName").innerHTML = folderOptionsHTML();
+  $("#editFolder").innerHTML = folderOptionsHTML();
 }
 function renderFolderManageList() {
-  $("#folderManageList").innerHTML = state.folders
-    .filter((folder) => folder !== "General")
-    .map((folder) => `<li><span>${folder}</span><div class="folder-manage-actions"><button type="button" data-rename-folder="${folder}" aria-label="Renombrar carpeta ${folder}">✎</button><button type="button" data-remove-folder="${folder}" aria-label="Borrar carpeta ${folder}">×</button></div></li>`)
+  const items = orderedFolders().filter(({ name }) => name !== "General");
+  $("#folderManageList").innerHTML = items
+    .map(({ name, depth }) => `<li><span>${"　".repeat(depth)}${name}</span><div class="folder-manage-actions"><button type="button" data-rename-folder="${name}" aria-label="Renombrar carpeta ${name}">✎</button><button type="button" data-remove-folder="${name}" aria-label="Borrar carpeta ${name}">×</button></div></li>`)
     .join("") || `<li><span>No hay carpetas propias todavía.</span></li>`;
 }
-function renderFolderGrid() {
-  $("#photoCount").textContent = `${state.photos.length} ${state.photos.length === 1 ? "foto" : "fotos"}`;
-  $("#folderGrid").innerHTML = state.folders
+function renderFolderCardsHTML(names) {
+  return names
     .map((folder) => {
-      const count = state.photos.filter((photo) => photo.folder === folder).length;
-      return `<button class="folder-card" data-folder="${folder}"><div><strong>${folder}</strong><small>${count} ${count === 1 ? "foto" : "fotos"}</small></div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+      const count = countPhotosRecursive(folder);
+      const subCount = childFolders(folder).length;
+      const selected = state.folderSelection.has(folder) ? " selected" : "";
+      return `<button class="folder-card${selected}" data-folder="${folder}"><div><strong>${folder}</strong><small>${count} ${count === 1 ? "foto" : "fotos"}${subCount ? ` · ${subCount} ${subCount === 1 ? "subcarpeta" : "subcarpetas"}` : ""}</small></div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>`;
     })
     .join("");
 }
+function renderFolderGrid() {
+  $("#photoCount").textContent = `${state.photos.length} ${state.photos.length === 1 ? "foto" : "fotos"}`;
+  $("#folderGrid").innerHTML = renderFolderCardsHTML(childFolders(null));
+}
 function showFolderView() {
   const folder = state.activeFolder;
+  const subfolders = childFolders(folder);
+  $("#subfolderGrid").innerHTML = renderFolderCardsHTML(subfolders);
+  $("#subfolderGrid").hidden = subfolders.length === 0;
   const photos = state.photos.filter((photo) => photo.folder === folder).slice().reverse();
   $("#folderViewTitle").textContent = folder;
-  $("#emptyState").hidden = photos.length > 0;
+  $("#emptyState").hidden = photos.length > 0 || subfolders.length > 0;
   $("#photoGrid").innerHTML = photos.map((photo) => `<button class="photo-card" data-id="${photo.id}"><img src="${urlFor(photo)}" alt="${photo.name}"><div><strong>${photo.name}</strong></div></button>`).join("");
   showView("folderView");
 }
 function backToFolderOrHome() {
   if (state.activeFolder) { showFolderView(); } else { renderFolderGrid(); showView("galleryView"); }
+}
+function goUpFromFolder() {
+  const obj = folderObj(state.activeFolder);
+  const parent = obj ? obj.parent : null;
+  if (parent) { state.activeFolder = parent; showFolderView(); }
+  else { state.activeFolder = null; renderFolderGrid(); showView("galleryView"); }
 }
 function resetCapture() {
   if (state.pendingImage) URL.revokeObjectURL(state.pendingImage);
@@ -161,9 +190,10 @@ function setupCameraZoom(stream) {
   const minZ = caps.zoom.min, maxZ = caps.zoom.max;
   const video = $("#cameraStream");
   let lastDist = 0;
-  video.addEventListener("touchstart", (e) => { if (e.touches.length === 2) lastDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY); }, { passive: true });
+  video.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { e.preventDefault(); lastDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY); } }, { passive: false });
   video.addEventListener("touchmove", (e) => {
     if (e.touches.length !== 2) return;
+    e.preventDefault();
     const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
     if (!lastDist) { lastDist = dist; return; }
     const scale = dist / lastDist;
@@ -234,20 +264,28 @@ document.addEventListener("click", (event) => {
   if (action === "camera") openCamera();
   if (action === "library") $("#libraryInput").click();
   if (action === "back-to-details") showView("captureView");
+  if (action === "up") goUpFromFolder();
   const folderCard = event.target.closest("[data-folder]");
-  if (folderCard) { if (longPressTriggered) { longPressTriggered = false; return; } state.activeFolder = folderCard.dataset.folder; showFolderView(); return; }
+  if (folderCard) {
+    if (longPressTriggered) { longPressTriggered = false; return; }
+    const folder = folderCard.dataset.folder;
+    if (state.folderSelectMode) { if (folder !== "General") toggleFolderSelection(folder); return; }
+    state.activeFolder = folder; showFolderView(); return;
+  }
   const card = event.target.closest(".photo-card"); if (card) openDetail(card.dataset.id);
   const tool = event.target.closest("[data-tool]"); if (tool) { state.tool = tool.dataset.tool; document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.toggle("active", button === tool)); }
   const color = event.target.closest("[data-color]"); if (color) { state.color = color.dataset.color; document.querySelectorAll(".color").forEach((button) => button.classList.toggle("active", button === color)); }
   const removeFolder = event.target.closest("[data-remove-folder]");
-  if (removeFolder) removeFolderByName(removeFolder.dataset.removeFolder);
+  if (removeFolder) { const name = removeFolder.dataset.removeFolder; if (confirm(`¿Borrar la carpeta "${name}"? Las fotos que tenga pasarán a "General".`)) removeFolderByName(name); }
   const renameFolder = event.target.closest("[data-rename-folder]");
   if (renameFolder) renameFolderByName(renameFolder.dataset.renameFolder);
+  const moveTarget = event.target.closest("[data-move-target]");
+  if (moveTarget) moveSelectedFoldersTo(moveTarget.dataset.moveTarget || null);
 });
 let longPressTimer = null;
 let longPressTriggered = false;
 let longPressStartPos = null;
-$("#folderGrid").addEventListener("pointerdown", (e) => {
+document.addEventListener("pointerdown", (e) => {
   const card = e.target.closest(".folder-card");
   if (!card) return;
   longPressTriggered = false;
@@ -256,12 +294,55 @@ $("#folderGrid").addEventListener("pointerdown", (e) => {
     longPressTriggered = true;
     const folder = card.dataset.folder;
     if (folder === "General") return;
-    removeFolderByName(folder);
-  }, 600);
+    toggleFolderSelection(folder);
+  }, 550);
 });
-$("#folderGrid").addEventListener("pointerup", () => clearTimeout(longPressTimer));
-$("#folderGrid").addEventListener("pointercancel", () => clearTimeout(longPressTimer));
-$("#folderGrid").addEventListener("pointermove", (e) => { if (longPressStartPos && Math.hypot(e.clientX - longPressStartPos.x, e.clientY - longPressStartPos.y) > 10) clearTimeout(longPressTimer); });
+document.addEventListener("pointerup", () => clearTimeout(longPressTimer));
+document.addEventListener("pointercancel", () => clearTimeout(longPressTimer));
+document.addEventListener("pointermove", (e) => { if (longPressStartPos && Math.hypot(e.clientX - longPressStartPos.x, e.clientY - longPressStartPos.y) > 10) clearTimeout(longPressTimer); });
+function toggleFolderSelection(name) {
+  if (state.folderSelection.has(name)) state.folderSelection.delete(name); else state.folderSelection.add(name);
+  if (state.folderSelection.size === 0) { exitFolderSelectMode(); return; }
+  state.folderSelectMode = true;
+  renderFolderSelectBar();
+  renderFolderGrid();
+  if ($("#folderView").classList.contains("active")) showFolderView();
+}
+function renderFolderSelectBar() {
+  const n = state.folderSelection.size;
+  $("#folderSelectBar").hidden = !state.folderSelectMode;
+  $("#folderSelectCount").textContent = `${n} ${n === 1 ? "carpeta seleccionada" : "carpetas seleccionadas"}`;
+}
+function exitFolderSelectMode() {
+  state.folderSelection.clear();
+  state.folderSelectMode = false;
+  renderFolderSelectBar();
+  renderFolderGrid();
+  if ($("#folderView").classList.contains("active")) showFolderView();
+}
+$("#folderSelectCancel").onclick = exitFolderSelectMode;
+$("#folderSelectDelete").onclick = async () => {
+  const names = [...state.folderSelection].filter((n) => n !== "General");
+  if (!names.length) return;
+  const label = names.length > 1 ? `las ${names.length} carpetas seleccionadas` : `la carpeta "${names[0]}"`;
+  if (!confirm(`¿Borrar ${label}? Las fotos que tengan pasarán a "General".`)) return;
+  for (const name of names) await removeFolderByName(name);
+  exitFolderSelectMode();
+};
+$("#folderSelectMove").onclick = () => {
+  const selected = [...state.folderSelection];
+  const blocked = new Set(selected.flatMap((name) => [name, ...descendantsOf(name)]));
+  const targets = orderedFolders().filter(({ name }) => !blocked.has(name));
+  $("#moveFolderList").innerHTML = `<li><button type="button" data-move-target="">— Nivel principal —</button></li>` +
+    targets.map(({ name, depth }) => `<li><button type="button" data-move-target="${name}">${"　".repeat(depth)}${name}</button></li>`).join("");
+  $("#moveFolderDialog").showModal();
+};
+async function moveSelectedFoldersTo(target) {
+  for (const name of state.folderSelection) { const obj = folderObj(name); if (obj) obj.parent = target; }
+  try { await idbSetFolders(state.folders); } catch (error) { console.error(error); showError("No se pudo mover la carpeta."); }
+  $("#moveFolderDialog").close();
+  exitFolderSelectMode();
+}
 $("#newPhotoButton").onclick = () => openCapture(state.activeFolder);
 $("#cameraInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
 $("#libraryInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
@@ -269,28 +350,40 @@ $("#cameraShutter").onclick = capturePhoto; $("#cameraCancel").onclick = closeCa
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
 $("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
 $("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); context.putImageData(state.history.at(-1), 0, 0); } };
-function openFolderManageDialog() { renderFolderManageList(); $("#folderDialog").showModal(); }
-$("#newFolderButton").onclick = openFolderManageDialog;
-$("#newFolderButtonHome").onclick = openFolderManageDialog;
+function openFolderManageDialog(defaultParent) {
+  renderFolderManageList();
+  $("#newFolderParent").innerHTML = '<option value="">— Nivel principal —</option>' + folderOptionsHTML();
+  $("#newFolderParent").value = defaultParent || "";
+  $("#folderDialog").showModal();
+}
+$("#newFolderButton").onclick = () => openFolderManageDialog(null);
+$("#newFolderButtonHome").onclick = () => openFolderManageDialog(null);
+$("#newFolderButtonFolder").onclick = () => openFolderManageDialog(state.activeFolder);
 $("#confirmFolder").onclick = async (event) => {
   const name = $("#newFolderInput").value.trim();
   if (!name) { event.preventDefault(); return; }
-  if (!state.folders.includes(name)) {
-    state.folders.push(name);
+  const parent = $("#newFolderParent").value || null;
+  if (!state.folders.some((f) => f.name === name)) {
+    state.folders.push({ name, parent });
     try { await idbSetFolders(state.folders); } catch (error) { console.error(error); showError("No se pudo guardar la carpeta nueva."); }
   }
-  renderFolders(); renderFolderGrid(); $("#folderName").value = name; $("#newFolderInput").value = "";
+  renderFolders(); renderFolderGrid();
+  if ($("#folderView").classList.contains("active")) showFolderView();
+  $("#folderName").value = name; $("#newFolderInput").value = ""; $("#newFolderParent").value = "";
 };
 async function removeFolderByName(name) {
   if (name === "General") return;
-  if (!confirm(`¿Borrar la carpeta "${name}"? Las fotos que tenga pasarán a "General".`)) return;
   try {
+    const obj = folderObj(name);
+    const parent = obj ? obj.parent : null;
+    childFolders(name).forEach((childName) => { const child = folderObj(childName); if (child) child.parent = parent; });
     const affected = state.photos.filter((photo) => photo.folder === name);
     for (const photo of affected) { photo.folder = "General"; await idbPutPhoto(photo); }
-    state.folders = state.folders.filter((folder) => folder !== name);
+    state.folders = state.folders.filter((folder) => folder.name !== name);
     await idbSetFolders(state.folders);
-    if (state.activeFolder === name) state.activeFolder = "General";
+    if (state.activeFolder === name) state.activeFolder = parent;
     renderFolders(); renderFolderManageList(); renderFolderGrid();
+    if ($("#folderView").classList.contains("active")) { if (state.activeFolder) showFolderView(); else showView("galleryView"); }
     if (state.activePhoto && state.activePhoto.folder === "General") $("#detailFolder").textContent = "General";
   } catch (error) {
     console.error(error);
@@ -302,14 +395,16 @@ async function renameFolderByName(oldName) {
   const newName = prompt("Nuevo nombre para la carpeta:", oldName);
   if (!newName || !newName.trim() || newName.trim() === oldName) return;
   const trimmed = newName.trim();
-  if (state.folders.includes(trimmed)) { showError("Ya existe una carpeta con ese nombre."); return; }
+  if (state.folders.some((f) => f.name === trimmed)) { showError("Ya existe una carpeta con ese nombre."); return; }
   try {
     const affected = state.photos.filter((photo) => photo.folder === oldName);
     for (const photo of affected) { photo.folder = trimmed; await idbPutPhoto(photo); }
-    state.folders = state.folders.map((folder) => folder === oldName ? trimmed : folder);
+    state.folders.forEach((f) => { if (f.parent === oldName) f.parent = trimmed; });
+    const obj = folderObj(oldName); if (obj) obj.name = trimmed;
     await idbSetFolders(state.folders);
     if (state.activeFolder === oldName) state.activeFolder = trimmed;
     renderFolders(); renderFolderManageList(); renderFolderGrid();
+    if ($("#folderView").classList.contains("active")) showFolderView();
   } catch (error) {
     console.error(error);
     showError("No se pudo renombrar la carpeta.");
@@ -421,10 +516,10 @@ async function shareOrDownload(blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 function renderExportFolderList() {
-  $("#exportFolderList").innerHTML = state.folders
-    .map((folder) => {
-      const count = state.photos.filter((photo) => photo.folder === folder).length;
-      return `<li><label><input type="checkbox" value="${folder}" checked> ${folder} <small>${count} ${count === 1 ? "foto" : "fotos"}</small></label></li>`;
+  $("#exportFolderList").innerHTML = orderedFolders()
+    .map(({ name, depth }) => {
+      const count = state.photos.filter((photo) => photo.folder === name).length;
+      return `<li><label><input type="checkbox" value="${name}" checked> ${"　".repeat(depth)}${name} <small>${count} ${count === 1 ? "foto" : "fotos"}</small></label></li>`;
     })
     .join("");
 }
