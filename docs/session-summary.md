@@ -189,3 +189,69 @@ varias carpetas dentro de otra.
 real que no existía antes, verificados en el Browser pane (creación de subcarpetas,
 navegación multinivel, mover con exclusión de ciclos, borrado con promoción de
 hijos, migración desde datos con formato viejo) sin errores de consola.
+
+---
+
+## Sesión 5 — Selección múltiple de fotos, editor de marcado y zoom (24/07/2026)
+
+**Disparador**: seguimiento de la sesión 4 en la misma jornada. El usuario pidió, en
+orden: (1) poder mover/copiar/eliminar varias fotos a la vez (ya existía para
+carpetas); (2) dos bugs del editor de marcado — el texto no se podía borrar sin
+deshacer todos los cambios posteriores, y tocar la foto con la herramienta de texto
+activa reabría el cuadro de diálogo en cualquier lugar; (3) el mismo problema de fondo
+generalizado — cualquier herramienta (no sólo texto) agregaba una forma con solo
+tocar la foto para mirarla, sin querer dibujar nada; (4) poder mover un texto ya
+colocado; (5) zoom en la cámara (el zoom por pellizco existente no funcionaba en
+dispositivos sin zoom óptico/digital por hardware, y además un bug real hacía que el
+zoom se acumulara de forma errática al abrir la cámara más de una vez); (6) zoom en la
+foto ya tomada, al verla en detalle.
+
+**Se hizo**:
+- **Selección múltiple de fotos**: mismo patrón de mantener presionado ya usado para
+  carpetas (sesión 4), aplicado a las fotos dentro de una carpeta. Barra de acciones
+  "Mover a... / Copiar a... / Eliminar / Cancelar". "Copiar" duplica la foto (nuevo
+  `id`, mismo `Blob`) en otra carpeta sin tocar el original; "Mover" reasigna
+  `photo.folder`; "Eliminar" borra todas las seleccionadas con una sola confirmación.
+- **Editor de marcado — texto como objeto independiente**: el texto dejó de
+  "hornearse" directo en los píxeles del canvas junto con flechas/recuadros/trazos
+  (compartiendo el mismo historial de "Deshacer"). Ahora vive como una lista de
+  objetos `{x, y, text, color, font}` (`state.textAnnotations`), redibujada sobre la
+  capa de formas (`state.history`) en cada render (`fullRedraw()`), en vez de
+  pixeles fijos. Esto permite mantener presionado un texto para borrarlo (con
+  confirmación) sin afectar el resto, y **arrastrarlo para moverlo** — el gesto
+  distingue arrastre de long-press por el desplazamiento del dedo antes de que venza
+  el timer de 550ms.
+- **Herramientas de un solo uso**: a pedido del usuario (con una solución que él
+  mismo propuso y resultó correcta), cada herramienta del editor (flecha, recuadro,
+  trazo, texto) se desactiva sola después de agregar una marca — hay que volver a
+  tocarla para usarla de nuevo. El editor arranca sin ninguna herramienta activa. Esto
+  resuelve de raíz que tocar la foto para simplemente mirarla agregara una forma sin
+  querer.
+- **Zoom de cámara — dos arreglos reales**:
+  1. Fallback de **zoom digital** (`transform:scale()` sobre el `<video>`) para
+     cámaras sin capability `zoom` de hardware — antes el pinch no hacía nada en esos
+     casos.
+  2. Bug encontrado probando "Cambiar cámara" dos veces seguidas:
+     `setupCameraZoom()` volvía a registrar los listeners de touch en cada apertura
+     de cámara sin sacar los anteriores, acumulándolos — el zoom terminaba
+     multiplicándose de forma errática entre gestos de distintas aperturas. Se
+     resolvió registrando los listeners **una sola vez** al cargar la app
+     (`initCameraZoomGestures()`), y dejando que cada apertura sólo actualice qué
+     `track` controlar (`cameraZoomInfo`). De paso se corrigió que el listener de
+     `touchmove` estaba registrado como `passive:true` pese a llamar
+     `preventDefault()` adentro (el navegador lo ignoraba en silencio).
+- **Zoom en la foto de detalle**: pellizco para ampliar, arrastre de un dedo para
+  paneo cuando está ampliada, doble tap para alternar 1x/2.5x. Hubo que
+  implementarlo a mano (no alcanza con el pinch-zoom nativo del navegador) porque
+  **Chrome desactiva el zoom nativo de la página cuando la PWA corre instalada en
+  modo standalone** — ver `docs/decisions.md`. El zoom se resetea a 1x cada vez que
+  se abre una foto distinta.
+- Tres bumps de `sw.js` en esta sesión (v15 a v18) — dos de ellos porque un bump
+  anterior había cacheado una versión de `app.js` de un paso intermedio, antes de
+  terminar un fix, y hubo que rebumpear para que el Browser pane dejara de servir esa
+  versión vieja durante las pruebas (ver nota en `docs/decisions.md`).
+
+**Resultado**: los seis pedidos resueltos, todos verificados paso a paso en el
+Browser pane (incluyendo simulación de `getUserMedia` con `canvas.captureStream()` y
+mock de `MediaStreamTrack.getCapabilities()`/`applyConstraints()` para probar ambos
+caminos de zoom de cámara) sin errores de consola.

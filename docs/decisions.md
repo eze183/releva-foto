@@ -225,3 +225,96 @@ más común (borrar una carpeta vacía o ya vaciada a mano).
 de la sesión 4 (selección múltiple para mover, renombrar, borrar). Si en el futuro se
 pide poder borrarla, hay que definir explícitamente a dónde van sus fotos y las de
 futuras carpetas eliminadas — no es un cambio menor.
+
+---
+
+## 11. El texto del editor de marcado es un objeto vectorial, no píxeles horneados
+
+**Decisión**: en `app.js`, `state.textAnnotations` guarda cada texto agregado en el
+editor de marcado como `{id, x, y, text, color, font}`, separado del historial de
+formas (`state.history`, que sigue siendo pixel-based para flecha/recuadro/trazo).
+Cada render (`fullRedraw()`) restaura la última captura de `state.history` y después
+dibuja todos los textos encima (`renderTextLayer()`). El texto sólo se "hornea" en
+píxeles definitivos al tocar "Listo" (`canvas.toDataURL()`), momento en el que deja de
+ser editable — hasta ahí, es un objeto que se puede mover (arrastrar) o borrar
+(mantener presionado) de forma independiente.
+
+**Por qué**: el diseño anterior dibujaba el texto directo sobre los píxeles del canvas
+con `context.fillText()`, empujándolo al mismo `state.history` que flechas/recuadros/
+trazos. Eso causaba dos bugs reales reportados por el usuario: (1) no se podía borrar
+sólo el texto sin deshacer también cualquier cambio posterior (compartía el mismo
+stack de "Deshacer"), y (2) no había forma de re-seleccionar/mover un texto ya
+colocado, porque una vez horneado en píxeles deja de ser una entidad distinguible del
+resto del dibujo.
+
+**Implicación para el futuro**: cualquier otra herramienta de marcado que necesite ser
+editable después de agregada (por ejemplo, si se pidiera poder mover una flecha ya
+dibujada) tendría que seguir el mismo patrón — vivir como objeto en una lista aparte,
+no bakearse directo en `state.history`. Mezclar ambos enfoques en la misma capa
+reintroduce el mismo problema que motivó este cambio.
+
+---
+
+## 12. Herramientas de marcado de un solo uso (se desactivan solas tras cada marca)
+
+**Decisión**: en el editor de marcado, seleccionar una herramienta (flecha, recuadro,
+trazo, texto) permite agregar **una sola marca**; después, `state.tool` vuelve a
+`null` automáticamente (`deactivateTool()`) y hay que volver a tocar el botón de la
+herramienta para usarla de nuevo. El editor arranca sin ninguna herramienta
+preseleccionada (antes "Flecha" quedaba activa por defecto).
+
+**Por qué**: el usuario reportó el problema de fondo detrás de los bugs de texto de
+la decisión #11 — con cualquier herramienta seleccionada, tocar la foto simplemente
+para mirarla de cerca (sin intención de dibujar) agregaba una forma no deseada. La
+solución fue una idea del propio usuario, validada como correcta: en vez de intentar
+distinguir "toco para navegar" de "toco para dibujar" con heurísticas de gesto, hacer
+que cada intención de dibujar sea un acto explícito y de un solo uso elimina la
+ambigüedad de raíz.
+
+**Implicación para el futuro**: cualquier herramienta nueva que se agregue al editor
+debe seguir el mismo patrón (llamar `deactivateTool()` después de completar su acción),
+no asumir que puede quedar "armada" indefinidamente esperando el próximo toque.
+
+---
+
+## 13. Zoom táctil implementado a mano (cámara y foto en detalle), no con el gesto
+     nativo del navegador
+
+**Decisión**: tanto el zoom de la cámara in-app como el zoom de la foto en la vista
+de detalle (`app.js`, `setupCameraZoom()`/`initCameraZoomGestures()` y
+`setupPhotoZoom()`) manejan el gesto de pellizco a mano con `touchstart`/`touchmove`
+propios, en vez de depender de que el navegador haga zoom nativo de la página.
+
+**Por qué**: el pinch-zoom nativo del navegador (zoom de viewport) queda
+**deshabilitado por Chrome cuando la PWA corre instalada en modo `standalone`**
+(display mode del manifest) — es una restricción deliberada de la plataforma para dar
+sensación de "app nativa", no algo que se pueda re-habilitar desde el manifest o el
+meta viewport. Como la app está pensada para instalarse (ver decisión de PWA
+instalable en `docs/roadmap.md`), cualquier necesidad de zoom táctil tiene que
+resolverse con JavaScript propio.
+
+**Trade-off aceptado en la cámara**: cuando el sensor no expone zoom óptico/digital
+por hardware (`MediaStreamTrack.getCapabilities().zoom` ausente), se usa zoom digital
+por software (`transform:scale()` sobre el `<video>`, recortado con `overflow:hidden`
+en un contenedor) — sacrifica nitidez al ampliar (es sólo escalar los píxeles ya
+capturados por el sensor a esa resolución), pero es preferible a que el pinch no haga
+nada.
+
+**Bug real encontrado y corregido en el camino**: `setupCameraZoom()` originalmente
+registraba los listeners de `touchstart`/`touchmove` en el `<video>` en **cada
+apertura de cámara**, sin sacar los anteriores — como el elemento `<video>` es
+persistente en el DOM (no se recrea), abrir la cámara más de una vez (por ejemplo con
+"Cambiar cámara", que cierra y reabre) hacía que los listeners se acumularan, y el
+zoom terminaba multiplicándose de forma errática entre gestos de distintas
+aperturas. Se corrigió separando el registro de listeners (una sola vez, al cargar la
+app, en `initCameraZoomGestures()`) de la configuración por apertura (`setupCameraZoom()`
+sólo actualiza un objeto compartido `cameraZoomInfo` con el track y los límites
+vigentes). Se detectó recién al testear explícitamente el escenario de abrir la
+cámara dos veces seguidas en la misma sesión — señal de que ese caso de prueba vale la
+pena repetir con cualquier función que registre listeners sobre elementos DOM
+persistentes reusados entre aperturas (cámara, editor de marcado, etc.).
+
+**Implicación para el futuro**: cualquier función que adjunte listeners a un elemento
+del DOM que persiste entre múltiples "sesiones" de uso (se abre y cierra varias veces
+sin recrearse) debe registrar esos listeners una única vez, no en cada apertura —
+patrón a repetir si se agrega, por ejemplo, zoom al editor de marcado.

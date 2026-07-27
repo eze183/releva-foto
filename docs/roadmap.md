@@ -5,8 +5,8 @@
 > sesión. Este archivo es el estado *actual* — resume qué está hecho, qué falta y qué
 > ideas quedaron abiertas sin comprometerse a implementarlas.
 
-_Última actualización: sesión del 24/07/2026 (zoom de cámara, fotos a color,
-subcarpetas anidadas, mover/borrar/renombrar carpetas)._
+_Última actualización: sesión del 24/07/2026 (selección múltiple de fotos, editor de
+marcado con texto movible y herramientas de un solo uso, zoom de cámara y de foto)._
 
 ## Estado actual — qué está implementado y verificado
 
@@ -16,8 +16,10 @@ subcarpetas anidadas, mover/borrar/renombrar carpetas)._
       fallback al `<input capture>` nativo si no hay soporte o se niega el permiso.
       Resuelve el bug de pérdida de fotos en Android (ver `docs/decisions.md`).
 - [x] Selección desde galería del teléfono (`<input type="file">`).
-- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto, trazo libre,
-      deshacer, selector de color (5 colores).
+- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto (movible con
+      arrastre, borrable con long-press), trazo libre, deshacer, selector de color
+      (5 colores). Cada herramienta es de un solo uso — se desactiva sola después de
+      agregar una marca, así tocar la foto para mirarla no dibuja nada por accidente.
 - [x] Almacenamiento en **IndexedDB** (fotos como `Blob`), con migración automática
       desde la versión anterior en `localStorage`.
 - [x] Editar nombre/carpeta/nota de una foto ya guardada.
@@ -34,8 +36,15 @@ subcarpetas anidadas, mover/borrar/renombrar carpetas)._
       principal (con conteo recursivo incluyendo subcarpetas), hay que entrar a una
       para ver sus subcarpetas y fotos. Agregar una foto desde adentro de una
       carpeta precarga esa carpeta en el formulario.
-- [x] Cámara con zoom táctil (pinch), usando el zoom de hardware del sensor cuando el
-      dispositivo lo soporta (`MediaStreamTrack.applyConstraints`).
+- [x] Cámara con zoom táctil (pinch): usa el zoom de hardware del sensor cuando el
+      dispositivo lo soporta (`MediaStreamTrack.applyConstraints`), con fallback a
+      zoom digital (`transform:scale()` sobre el video) cuando no.
+- [x] Zoom táctil en la foto ya tomada (vista de detalle): pellizco para ampliar,
+      arrastre de un dedo para paneo, doble tap para alternar 1x/2.5x. Implementado a
+      mano porque el pinch-zoom nativo de la página queda deshabilitado al correr la
+      app instalada como PWA (ver `docs/decisions.md`).
+- [x] Selección múltiple de fotos dentro de una carpeta (mantener presionada una):
+      mover, copiar o eliminar varias a la vez.
 - [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) con selección de qué carpetas
       incluir (checkboxes, todas tildadas por defecto) — organiza por subcarpeta y
       agrega un `registro.csv`. Comparte vía `navigator.share` si está disponible, si
