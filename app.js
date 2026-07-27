@@ -183,28 +183,40 @@ async function openCamera() {
     $("#cameraInput").click();
   }
 }
+// El listener se registra una sola vez (más abajo); acá sólo se actualiza qué
+// track controlar. Si esto reatachara listeners en cada apertura de cámara, se
+// acumularían y el zoom quedaría errático (bug real encontrado al probar
+// "Cambiar cámara" dos veces seguidas).
+const cameraZoomInfo = { track: null, hasHardwareZoom: false, minZ: 1, maxZ: 4 };
 function setupCameraZoom(stream) {
   const track = stream.getVideoTracks()[0];
   const caps = track.getCapabilities ? track.getCapabilities() : {};
-  if (!caps.zoom) return;
-  const minZ = caps.zoom.min, maxZ = caps.zoom.max;
+  cameraZoomInfo.track = track;
+  cameraZoomInfo.hasHardwareZoom = !!caps.zoom;
+  cameraZoomInfo.minZ = cameraZoomInfo.hasHardwareZoom ? caps.zoom.min : 1;
+  cameraZoomInfo.maxZ = cameraZoomInfo.hasHardwareZoom ? caps.zoom.max : 4;
+  $("#cameraStream").style.transform = "scale(1)";
+}
+(function initCameraZoomGestures() {
   const video = $("#cameraStream");
   let lastDist = 0;
   video.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { e.preventDefault(); lastDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY); } }, { passive: false });
   video.addEventListener("touchmove", (e) => {
-    if (e.touches.length !== 2) return;
+    if (e.touches.length !== 2 || !cameraZoomInfo.track) return;
     e.preventDefault();
     const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
     if (!lastDist) { lastDist = dist; return; }
     const scale = dist / lastDist;
-    state.cameraZoom = Math.min(maxZ, Math.max(minZ, state.cameraZoom * scale));
-    track.applyConstraints({ advanced: [{ zoom: state.cameraZoom }] });
+    state.cameraZoom = Math.min(cameraZoomInfo.maxZ, Math.max(cameraZoomInfo.minZ, state.cameraZoom * scale));
+    if (cameraZoomInfo.hasHardwareZoom) cameraZoomInfo.track.applyConstraints({ advanced: [{ zoom: state.cameraZoom }] });
+    else video.style.transform = `scale(${state.cameraZoom})`;
     lastDist = dist;
-  }, { passive: true });
-}
+  }, { passive: false });
+})();
 function closeCamera() {
   if (state.cameraStream) { state.cameraStream.getTracks().forEach((track) => track.stop()); state.cameraStream = null; }
   $("#cameraStream").srcObject = null;
+  $("#cameraStream").style.transform = "scale(1)";
   $("#cameraOverlay").hidden = true;
 }
 function capturePhoto() {
@@ -235,6 +247,7 @@ function openDetail(id) {
   $("#detailNote").textContent = photo.note || "Sin observaciones.";
   $("#detailDate").textContent = formatDate(photo.createdAt);
   $("#editForm").hidden = true; $("#detailReadView").hidden = false;
+  resetPhotoZoom();
   showView("detailView");
 }
 function openEdit() {
@@ -243,6 +256,78 @@ function openEdit() {
   $("#editName").value = photo.name; $("#editFolder").value = photo.folder; $("#editNote").value = photo.note || "";
   $("#detailReadView").hidden = true; $("#editForm").hidden = false;
 }
+
+// --- Zoom con pellizco sobre la foto en detalle: el navegador desactiva el
+// pinch-zoom nativo de la página cuando la app corre instalada como PWA (modo
+// standalone), así que hay que implementarlo a mano con transform CSS. ---
+const photoZoom = { scale: 1, x: 0, y: 0 };
+function applyPhotoZoom() { $("#detailImage").style.transform = `translate(${photoZoom.x}px, ${photoZoom.y}px) scale(${photoZoom.scale})`; }
+function resetPhotoZoom() { photoZoom.scale = 1; photoZoom.x = 0; photoZoom.y = 0; applyPhotoZoom(); }
+function clampPhotoZoom(wrapRect) {
+  const minX = wrapRect.width - wrapRect.width * photoZoom.scale;
+  const minY = wrapRect.height - wrapRect.height * photoZoom.scale;
+  photoZoom.x = Math.min(0, Math.max(minX, photoZoom.x));
+  photoZoom.y = Math.min(0, Math.max(minY, photoZoom.y));
+}
+(function setupPhotoZoom() {
+  const wrap = $("#detailImageWrap");
+  let pinchDist = 0, pinchStartScale = 1, pinchAnchor = null;
+  let panStart = null, panOrigin = null;
+  let lastTapTime = 0;
+  wrap.addEventListener("touchstart", (e) => {
+    const rect = wrap.getBoundingClientRect();
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+      pinchStartScale = photoZoom.scale;
+      pinchAnchor = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top };
+      panStart = null;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        e.preventDefault();
+        const tapX = e.touches[0].clientX - rect.left, tapY = e.touches[0].clientY - rect.top;
+        if (photoZoom.scale > 1) { resetPhotoZoom(); }
+        else {
+          photoZoom.scale = 2.5;
+          photoZoom.x = tapX - tapX * photoZoom.scale;
+          photoZoom.y = tapY - tapY * photoZoom.scale;
+          clampPhotoZoom(rect);
+          applyPhotoZoom();
+        }
+        lastTapTime = 0;
+        return;
+      }
+      lastTapTime = now;
+      if (photoZoom.scale > 1) { panStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; panOrigin = { x: photoZoom.x, y: photoZoom.y }; }
+    }
+  }, { passive: false });
+  wrap.addEventListener("touchmove", (e) => {
+    const rect = wrap.getBoundingClientRect();
+    if (e.touches.length === 2 && pinchDist) {
+      e.preventDefault();
+      const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+      const newScale = Math.min(4, Math.max(1, pinchStartScale * (dist / pinchDist)));
+      const localX = (pinchAnchor.x - photoZoom.x) / photoZoom.scale, localY = (pinchAnchor.y - photoZoom.y) / photoZoom.scale;
+      photoZoom.scale = newScale;
+      photoZoom.x = pinchAnchor.x - localX * newScale;
+      photoZoom.y = pinchAnchor.y - localY * newScale;
+      clampPhotoZoom(rect);
+      applyPhotoZoom();
+    } else if (e.touches.length === 1 && panStart) {
+      e.preventDefault();
+      photoZoom.x = panOrigin.x + (e.touches[0].clientX - panStart.x);
+      photoZoom.y = panOrigin.y + (e.touches[0].clientY - panStart.y);
+      clampPhotoZoom(rect);
+      applyPhotoZoom();
+    }
+  }, { passive: false });
+  wrap.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) pinchDist = 0;
+    if (e.touches.length === 0) { panStart = null; if (photoZoom.scale <= 1) resetPhotoZoom(); }
+  });
+  wrap.addEventListener("touchcancel", () => { pinchDist = 0; panStart = null; });
+})();
 
 const canvas = $("#annotationCanvas"); const context = canvas.getContext("2d"); let editorImage = new Image();
 function drawBase() { context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(editorImage, 0, 0, canvas.width, canvas.height); }

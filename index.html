@@ -165,7 +165,9 @@
             </button>
           </div>
         </div>
-        <img id="detailImage" class="detail-image" alt="Fotografía de relevamiento" />
+        <div id="detailImageWrap" class="detail-image-wrap">
+          <img id="detailImage" class="detail-image" alt="Fotografía de relevamiento" />
+        </div>
         <div id="detailReadView" class="detail-content"><span id="detailFolder" class="folder-pill"></span><h2 id="detailName"></h2><p id="detailNote"></p><small id="detailDate"></small></div>
         <form id="editForm" class="details-form" hidden>
           <label>Nombre<input id="editName" required /></label>
@@ -187,7 +189,9 @@
       </nav>
     </main>
     <div id="cameraOverlay" class="camera-overlay" hidden>
-      <video id="cameraStream" playsinline autoplay muted></video>
+      <div class="camera-viewport">
+        <video id="cameraStream" playsinline autoplay muted></video>
+      </div>
       <div class="camera-controls">
         <button id="cameraCancel" class="camera-side" aria-label="Cancelar">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

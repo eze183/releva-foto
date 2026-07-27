@@ -78,7 +78,8 @@ dialog select{border:1px solid var(--line);background:var(--surface);padding:9px
 .folder-card strong{font-size:.92rem;font-weight:800}
 .folder-card small{color:var(--muted);font-size:.75rem}
 .folder-card svg{color:var(--muted);flex:none}
-.detail-image{width:100%;height:38vh;object-fit:cover;background:var(--surface);border-bottom:2px solid var(--line);}
+.detail-image-wrap{width:100%;height:38vh;overflow:hidden;background:var(--surface);border-bottom:2px solid var(--line);touch-action:none}
+.detail-image{width:100%;height:100%;object-fit:cover;display:block;transform-origin:0 0}
 .detail-content{padding:18px 4px}
 .detail-content h2{font-size:1.3rem;margin:12px 0 8px}
 .detail-content p{line-height:1.55;color:color-mix(in srgb, var(--ink) 80%, transparent)}
@@ -113,7 +114,8 @@ dialog input{margin-top:10px}
 .camera-overlay{position:fixed;inset:0;z-index:80;background:#000;display:flex;flex-direction:column}
 .camera-overlay[hidden]{display:none}
 .camera-overlay{touch-action:none}
-.camera-overlay video{flex:1;width:100%;min-height:0;object-fit:cover;background:#000;touch-action:none}
+.camera-viewport{flex:1;min-height:0;overflow:hidden;background:#000}
+.camera-overlay video{width:100%;height:100%;object-fit:cover;background:#000;touch-action:none}
 .camera-controls{display:flex;align-items:center;justify-content:space-between;padding:20px 32px calc(24px + env(safe-area-inset-bottom));background:#000}
 .camera-side{width:48px;height:48px;border:0;background:#ffffff22;color:#fff;display:grid;place-items:center;cursor:pointer}
 .camera-shutter{width:72px;height:72px;border:4px solid #fff;background:var(--accent);cursor:pointer;padding:0}
