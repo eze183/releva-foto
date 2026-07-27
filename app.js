@@ -260,6 +260,7 @@ function startEditor() {
     drawBase();
     state.history = [context.getImageData(0, 0, canvas.width, canvas.height)];
     state.textAnnotations = []; state.lastDrawEnd = null;
+    deactivateTool();
     showView("editorView");
   };
   editorImage.src = state.annotatedImage || state.pendingImage;
@@ -275,12 +276,17 @@ function drawShape(end) {
   if (state.tool === "draw") { setupStroke(); context.beginPath(); context.moveTo(state.start.x, state.start.y); context.lineTo(end.x, end.y); context.stroke(); state.start = end; state.history[state.history.length - 1] = context.getImageData(0, 0, canvas.width, canvas.height); }
   renderTextLayer();
 }
+function deactivateTool() {
+  state.tool = null;
+  document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.remove("active"));
+}
 function finalizeShape() {
   renderShapeLayer();
   if (state.tool === "arrow" && state.lastDrawEnd) drawArrow(state.start, state.lastDrawEnd);
   if (state.tool === "box" && state.lastDrawEnd) { setupStroke(); context.strokeRect(state.start.x, state.start.y, state.lastDrawEnd.x - state.start.x, state.lastDrawEnd.y - state.start.y); }
   snapshot();
   fullRedraw();
+  deactivateTool();
 }
 function textHitTest(p) {
   for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
@@ -294,19 +300,19 @@ function textHitTest(p) {
   }
   return null;
 }
-let textLongPressTimer = null;
-let textLongPressStartPos = null;
+let textInteraction = null;
 canvas.addEventListener("pointerdown", (event) => {
   const p = point(event);
   const hitText = textHitTest(p);
   if (hitText) {
-    textLongPressStartPos = p;
-    textLongPressTimer = setTimeout(() => {
-      textLongPressTimer = null;
-      if (confirm(`¿Eliminar el texto "${hitText.text}"?`)) {
+    textInteraction = { target: hitText, startPos: p, dragging: false, offsetX: hitText.x - p.x, offsetY: hitText.y - p.y, longPressTimer: null };
+    textInteraction.longPressTimer = setTimeout(() => {
+      textInteraction.longPressTimer = null;
+      if (!textInteraction.dragging && confirm(`¿Eliminar el texto "${hitText.text}"?`)) {
         state.textAnnotations = state.textAnnotations.filter((t) => t.id !== hitText.id);
         fullRedraw();
       }
+      textInteraction = null;
     }, 550);
     return;
   }
@@ -316,28 +322,43 @@ canvas.addEventListener("pointerdown", (event) => {
       setupStroke();
       state.textAnnotations.push({ id: crypto.randomUUID(), x: p.x, y: p.y, text: label, color: state.color, font: context.font });
       fullRedraw();
-      state.tool = "arrow";
-      document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === "arrow"));
     }
+    deactivateTool();
     return;
   }
+  if (!state.tool) return;
   state.drawing = true; state.start = p; canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener("pointermove", (event) => {
-  if (textLongPressTimer) {
+  if (textInteraction) {
     const p = point(event);
-    if (textLongPressStartPos && Math.hypot(p.x - textLongPressStartPos.x, p.y - textLongPressStartPos.y) > 15) { clearTimeout(textLongPressTimer); textLongPressTimer = null; }
+    const moved = Math.hypot(p.x - textInteraction.startPos.x, p.y - textInteraction.startPos.y);
+    if (!textInteraction.dragging && moved > 8) {
+      if (textInteraction.longPressTimer) { clearTimeout(textInteraction.longPressTimer); textInteraction.longPressTimer = null; }
+      textInteraction.dragging = true;
+    }
+    if (textInteraction.dragging) {
+      textInteraction.target.x = p.x + textInteraction.offsetX;
+      textInteraction.target.y = p.y + textInteraction.offsetY;
+      fullRedraw();
+    }
     return;
   }
   if (state.drawing) drawShape(point(event));
 });
 canvas.addEventListener("pointerup", () => {
-  if (textLongPressTimer) { clearTimeout(textLongPressTimer); textLongPressTimer = null; return; }
+  if (textInteraction) {
+    if (textInteraction.longPressTimer) clearTimeout(textInteraction.longPressTimer);
+    textInteraction = null;
+    return;
+  }
   if (!state.drawing) return;
   state.drawing = false;
   finalizeShape();
 });
-canvas.addEventListener("pointercancel", () => { if (textLongPressTimer) { clearTimeout(textLongPressTimer); textLongPressTimer = null; } });
+canvas.addEventListener("pointercancel", () => {
+  if (textInteraction) { if (textInteraction.longPressTimer) clearTimeout(textInteraction.longPressTimer); textInteraction = null; }
+});
 
 document.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
