@@ -1,4 +1,4 @@
-const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], textAnnotations: [], lastDrawEnd: null, drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false, photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null };
+const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], annotations: [], selectedAnnotationId: null, drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false, photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null };
 const $ = (selector) => document.querySelector(selector);
 const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
@@ -333,10 +333,48 @@ const canvas = $("#annotationCanvas"); const context = canvas.getContext("2d"); 
 function drawBase() { context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(editorImage, 0, 0, canvas.width, canvas.height); }
 function snapshot() { state.history.push(context.getImageData(0, 0, canvas.width, canvas.height)); }
 function renderShapeLayer() { context.putImageData(state.history.at(-1), 0, 0); }
-function renderTextLayer() {
-  state.textAnnotations.forEach((t) => { context.fillStyle = t.color; context.font = t.font; context.fillText(t.text, t.x, t.y); });
+function strokeWidth() { return Math.max(4, canvas.width / 180); }
+function fontFor(a) { return `bold ${a.fontSize}px sans-serif`; }
+function labelFor(type) { return type === "arrow" ? "flecha" : type === "box" ? "recuadro" : "texto"; }
+
+// --- Flechas, recuadros y texto viven como objetos (state.annotations), no como
+// píxeles horneados — así se pueden seleccionar, mover y ajustar después de
+// agregados. El trazo libre queda pixel-based en state.history (no se pidió que
+// fuera editable). ---
+function drawArrowShape(a) {
+  context.strokeStyle = a.color; context.fillStyle = a.color; context.lineWidth = strokeWidth(); context.lineCap = "round";
+  const angle = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+  const size = Math.max(15, canvas.width / 32);
+  context.beginPath();
+  context.moveTo(a.x1, a.y1); context.lineTo(a.x2, a.y2);
+  context.lineTo(a.x2 - size * Math.cos(angle - Math.PI / 6), a.y2 - size * Math.sin(angle - Math.PI / 6));
+  context.moveTo(a.x2, a.y2);
+  context.lineTo(a.x2 - size * Math.cos(angle + Math.PI / 6), a.y2 - size * Math.sin(angle + Math.PI / 6));
+  context.stroke();
 }
-function fullRedraw() { renderShapeLayer(); renderTextLayer(); }
+function drawBoxShape(a) { context.strokeStyle = a.color; context.lineWidth = strokeWidth(); context.strokeRect(a.x, a.y, a.w, a.h); }
+function drawTextShape(a) { context.fillStyle = a.color; context.font = fontFor(a); context.fillText(a.text, a.x, a.y); }
+function drawAnnotation(a) { if (a.type === "arrow") drawArrowShape(a); else if (a.type === "box") drawBoxShape(a); else drawTextShape(a); }
+function annotationHandles(a) {
+  if (a.type === "arrow") return [{ key: "start", x: a.x1, y: a.y1 }, { key: "end", x: a.x2, y: a.y2 }];
+  if (a.type === "box") return [{ key: "tl", x: a.x, y: a.y }, { key: "tr", x: a.x + a.w, y: a.y }, { key: "bl", x: a.x, y: a.y + a.h }, { key: "br", x: a.x + a.w, y: a.y + a.h }];
+  context.font = fontFor(a);
+  return [{ key: "resize", x: a.x + context.measureText(a.text).width + 12, y: a.y }];
+}
+function drawHandles(a) {
+  const r = Math.max(9, canvas.width / 90);
+  annotationHandles(a).forEach((h) => {
+    context.fillStyle = "#ffffff"; context.strokeStyle = a.color; context.lineWidth = 2;
+    context.beginPath(); context.arc(h.x, h.y, r, 0, Math.PI * 2); context.fill(); context.stroke();
+  });
+}
+function selectedAnnotation() { return state.annotations.find((a) => a.id === state.selectedAnnotationId); }
+function renderAnnotations() {
+  state.annotations.forEach((a) => drawAnnotation(a));
+  const selected = selectedAnnotation();
+  if (selected) drawHandles(selected);
+}
+function fullRedraw() { renderShapeLayer(); renderAnnotations(); }
 function startEditor() {
   editorImage = new Image();
   editorImage.onload = () => {
@@ -344,97 +382,179 @@ function startEditor() {
     canvas.width = Math.round(editorImage.width * ratio); canvas.height = Math.round(editorImage.height * ratio);
     drawBase();
     state.history = [context.getImageData(0, 0, canvas.width, canvas.height)];
-    state.textAnnotations = []; state.lastDrawEnd = null;
+    state.annotations = []; state.selectedAnnotationId = null;
     deactivateTool();
     showView("editorView");
   };
   editorImage.src = state.annotatedImage || state.pendingImage;
 }
 function point(event) { const rect = canvas.getBoundingClientRect(); const touch = event.touches?.[0] || event; return { x: (touch.clientX - rect.left) * canvas.width / rect.width, y: (touch.clientY - rect.top) * canvas.height / rect.height }; }
-function setupStroke() { context.strokeStyle = state.color; context.fillStyle = state.color; context.lineWidth = Math.max(4, canvas.width / 180); context.lineCap = "round"; context.font = `bold ${Math.max(20, canvas.width / 23)}px sans-serif`; }
-function drawArrow(start, end) { setupStroke(); const angle = Math.atan2(end.y - start.y, end.x - start.x); const size = Math.max(15, canvas.width / 32); context.beginPath(); context.moveTo(start.x, start.y); context.lineTo(end.x, end.y); context.lineTo(end.x - size * Math.cos(angle - Math.PI / 6), end.y - size * Math.sin(angle - Math.PI / 6)); context.moveTo(end.x, end.y); context.lineTo(end.x - size * Math.cos(angle + Math.PI / 6), end.y - size * Math.sin(angle + Math.PI / 6)); context.stroke(); }
+function setupStroke() { context.strokeStyle = state.color; context.fillStyle = state.color; context.lineWidth = strokeWidth(); context.lineCap = "round"; }
 function drawShape(end) {
-  state.lastDrawEnd = end;
+  // sólo trazo libre: arrastre incremental horneado en state.history (no es editable después).
   renderShapeLayer();
-  if (state.tool === "arrow") drawArrow(state.start, end);
-  if (state.tool === "box") { setupStroke(); context.strokeRect(state.start.x, state.start.y, end.x - state.start.x, end.y - state.start.y); }
-  if (state.tool === "draw") { setupStroke(); context.beginPath(); context.moveTo(state.start.x, state.start.y); context.lineTo(end.x, end.y); context.stroke(); state.start = end; state.history[state.history.length - 1] = context.getImageData(0, 0, canvas.width, canvas.height); }
-  renderTextLayer();
+  setupStroke();
+  context.beginPath(); context.moveTo(state.start.x, state.start.y); context.lineTo(end.x, end.y); context.stroke();
+  state.start = end;
+  state.history[state.history.length - 1] = context.getImageData(0, 0, canvas.width, canvas.height);
+  renderAnnotations();
 }
 function deactivateTool() {
   state.tool = null;
   document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.remove("active"));
 }
 function finalizeShape() {
+  // sólo trazo libre; flechas/recuadros/texto se confirman en pointerup vía "interaction".
   renderShapeLayer();
-  if (state.tool === "arrow" && state.lastDrawEnd) drawArrow(state.start, state.lastDrawEnd);
-  if (state.tool === "box" && state.lastDrawEnd) { setupStroke(); context.strokeRect(state.start.x, state.start.y, state.lastDrawEnd.x - state.start.x, state.lastDrawEnd.y - state.start.y); }
   snapshot();
   fullRedraw();
   deactivateTool();
 }
-function textHitTest(p) {
-  for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
-    const t = state.textAnnotations[i];
-    context.font = t.font;
-    const width = context.measureText(t.text).width;
-    const fontSizeMatch = /(\d+(?:\.\d+)?)px/.exec(t.font);
-    const height = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 20;
-    const pad = 12;
-    if (p.x >= t.x - pad && p.x <= t.x + width + pad && p.y >= t.y - height - pad && p.y <= t.y + pad) return t;
+function distanceToSegment(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+function annotationBoundsHit(a, p) {
+  const pad = 14;
+  if (a.type === "arrow") return distanceToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) <= pad;
+  if (a.type === "box") {
+    const x0 = Math.min(a.x, a.x + a.w), x1 = Math.max(a.x, a.x + a.w), y0 = Math.min(a.y, a.y + a.h), y1 = Math.max(a.y, a.y + a.h);
+    return p.x >= x0 - pad && p.x <= x1 + pad && p.y >= y0 - pad && p.y <= y1 + pad;
   }
+  context.font = fontFor(a);
+  const width = context.measureText(a.text).width;
+  return p.x >= a.x - pad && p.x <= a.x + width + pad && p.y >= a.y - a.fontSize - pad && p.y <= a.y + pad;
+}
+function findAnnotationAt(p) {
+  for (let i = state.annotations.length - 1; i >= 0; i--) if (annotationBoundsHit(state.annotations[i], p)) return state.annotations[i];
   return null;
 }
-let textInteraction = null;
+function findHandleAt(a, p) {
+  const r = Math.max(14, canvas.width / 70);
+  for (const h of annotationHandles(a)) if (Math.hypot(p.x - h.x, p.y - h.y) <= r) return h.key;
+  return null;
+}
+function translateAnnotation(a, dx, dy) {
+  if (a.type === "arrow") { a.x1 += dx; a.y1 += dy; a.x2 += dx; a.y2 += dy; }
+  else { a.x += dx; a.y += dy; }
+}
+function resizeAnnotation(a, handleKey, p) {
+  if (a.type === "arrow") {
+    if (handleKey === "start") { a.x1 = p.x; a.y1 = p.y; } else { a.x2 = p.x; a.y2 = p.y; }
+  } else if (a.type === "box") {
+    const opposite = {
+      tl: { x: a.x + a.w, y: a.y + a.h }, tr: { x: a.x, y: a.y + a.h },
+      bl: { x: a.x + a.w, y: a.y }, br: { x: a.x, y: a.y },
+    }[handleKey];
+    a.x = Math.min(opposite.x, p.x); a.y = Math.min(opposite.y, p.y);
+    a.w = Math.abs(p.x - opposite.x); a.h = Math.abs(p.y - opposite.y);
+  } else {
+    context.font = fontFor(a);
+    const currentWidth = context.measureText(a.text).width || 1;
+    const desiredWidth = Math.max(10, p.x - a.x);
+    a.fontSize = Math.min(160, Math.max(12, a.fontSize * (desiredWidth / currentWidth)));
+  }
+}
+function normalizeBox(a) {
+  if (a.w < 0) { a.x += a.w; a.w = -a.w; }
+  if (a.h < 0) { a.y += a.h; a.h = -a.h; }
+}
+let interaction = null;
 canvas.addEventListener("pointerdown", (event) => {
   const p = point(event);
-  const hitText = textHitTest(p);
-  if (hitText) {
-    textInteraction = { target: hitText, startPos: p, dragging: false, offsetX: hitText.x - p.x, offsetY: hitText.y - p.y, longPressTimer: null };
-    textInteraction.longPressTimer = setTimeout(() => {
-      textInteraction.longPressTimer = null;
-      if (!textInteraction.dragging && confirm(`¿Eliminar el texto "${hitText.text}"?`)) {
-        state.textAnnotations = state.textAnnotations.filter((t) => t.id !== hitText.id);
+  const selected = selectedAnnotation();
+  if (selected) {
+    const handleKey = findHandleAt(selected, p);
+    if (handleKey) { interaction = { mode: "resize", id: selected.id, handleKey }; return; }
+  }
+  const hit = findAnnotationAt(p);
+  if (hit) {
+    state.selectedAnnotationId = hit.id;
+    interaction = { mode: "move", id: hit.id, start: p, moved: false, longPressTimer: null };
+    interaction.longPressTimer = setTimeout(() => {
+      if (!interaction || interaction.moved) return;
+      interaction.longPressTimer = null;
+      if (confirm(`¿Eliminar este ${labelFor(hit.type)}?`)) {
+        state.annotations = state.annotations.filter((a) => a.id !== hit.id);
+        if (state.selectedAnnotationId === hit.id) state.selectedAnnotationId = null;
         fullRedraw();
       }
-      textInteraction = null;
+      interaction = null;
     }, 550);
+    fullRedraw();
     return;
   }
+  if (state.selectedAnnotationId) { state.selectedAnnotationId = null; fullRedraw(); }
   if (state.tool === "text") {
     const label = prompt("Texto a agregar:");
     if (label) {
-      setupStroke();
-      state.textAnnotations.push({ id: crypto.randomUUID(), x: p.x, y: p.y, text: label, color: state.color, font: context.font });
+      const a = { id: crypto.randomUUID(), type: "text", x: p.x, y: p.y, text: label, color: state.color, fontSize: Math.max(20, canvas.width / 23) };
+      state.annotations.push(a);
+      state.selectedAnnotationId = a.id;
       fullRedraw();
     }
     deactivateTool();
     return;
   }
-  if (!state.tool) return;
-  state.drawing = true; state.start = p; canvas.setPointerCapture(event.pointerId);
-});
-canvas.addEventListener("pointermove", (event) => {
-  if (textInteraction) {
-    const p = point(event);
-    const moved = Math.hypot(p.x - textInteraction.startPos.x, p.y - textInteraction.startPos.y);
-    if (!textInteraction.dragging && moved > 8) {
-      if (textInteraction.longPressTimer) { clearTimeout(textInteraction.longPressTimer); textInteraction.longPressTimer = null; }
-      textInteraction.dragging = true;
-    }
-    if (textInteraction.dragging) {
-      textInteraction.target.x = p.x + textInteraction.offsetX;
-      textInteraction.target.y = p.y + textInteraction.offsetY;
-      fullRedraw();
-    }
+  if (state.tool === "arrow" || state.tool === "box") {
+    const a = state.tool === "arrow"
+      ? { id: crypto.randomUUID(), type: "arrow", x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: state.color }
+      : { id: crypto.randomUUID(), type: "box", x: p.x, y: p.y, w: 0, h: 0, color: state.color };
+    state.annotations.push(a);
+    interaction = { mode: "create", id: a.id };
     return;
   }
-  if (state.drawing) drawShape(point(event));
+  if (state.tool === "draw") { state.drawing = true; state.start = p; canvas.setPointerCapture(event.pointerId); return; }
+});
+canvas.addEventListener("pointermove", (event) => {
+  const p = point(event);
+  if (interaction) {
+    if (interaction.mode === "create") {
+      const a = state.annotations.find((x) => x.id === interaction.id);
+      if (!a) return;
+      if (a.type === "arrow") { a.x2 = p.x; a.y2 = p.y; } else { a.w = p.x - a.x; a.h = p.y - a.y; }
+      fullRedraw();
+      return;
+    }
+    if (interaction.mode === "move") {
+      const moved = Math.hypot(p.x - interaction.start.x, p.y - interaction.start.y);
+      if (!interaction.moved && moved > 6) {
+        if (interaction.longPressTimer) { clearTimeout(interaction.longPressTimer); interaction.longPressTimer = null; }
+        interaction.moved = true;
+      }
+      if (interaction.moved) {
+        const a = state.annotations.find((x) => x.id === interaction.id);
+        translateAnnotation(a, p.x - interaction.start.x, p.y - interaction.start.y);
+        interaction.start = p;
+        fullRedraw();
+      }
+      return;
+    }
+    if (interaction.mode === "resize") {
+      const a = state.annotations.find((x) => x.id === interaction.id);
+      if (a) { resizeAnnotation(a, interaction.handleKey, p); fullRedraw(); }
+      return;
+    }
+  }
+  if (state.drawing) drawShape(p);
 });
 canvas.addEventListener("pointerup", () => {
-  if (textInteraction) {
-    if (textInteraction.longPressTimer) clearTimeout(textInteraction.longPressTimer);
-    textInteraction = null;
+  if (interaction) {
+    if (interaction.mode === "create") {
+      const a = state.annotations.find((x) => x.id === interaction.id);
+      if (a) {
+        const tooSmall = a.type === "arrow" ? Math.hypot(a.x2 - a.x1, a.y2 - a.y1) < 6 : Math.abs(a.w) < 6 && Math.abs(a.h) < 6;
+        if (tooSmall) state.annotations = state.annotations.filter((x) => x.id !== a.id);
+        else { if (a.type === "box") normalizeBox(a); state.selectedAnnotationId = a.id; }
+      }
+      deactivateTool();
+      fullRedraw();
+    }
+    if (interaction.mode === "move" && interaction.longPressTimer) clearTimeout(interaction.longPressTimer);
+    interaction = null;
     return;
   }
   if (!state.drawing) return;
@@ -442,7 +562,7 @@ canvas.addEventListener("pointerup", () => {
   finalizeShape();
 });
 canvas.addEventListener("pointercancel", () => {
-  if (textInteraction) { if (textInteraction.longPressTimer) clearTimeout(textInteraction.longPressTimer); textInteraction = null; }
+  if (interaction) { if (interaction.longPressTimer) clearTimeout(interaction.longPressTimer); interaction = null; }
 });
 
 document.addEventListener("click", (event) => {
@@ -619,7 +739,7 @@ $("#cameraInput").onchange = (event) => { handleImage(event.target.files[0]); ev
 $("#libraryInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
 $("#cameraShutter").onclick = capturePhoto; $("#cameraCancel").onclick = closeCamera; $("#cameraFlip").onclick = flipCamera;
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
-$("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { fullRedraw(); state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
+$("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.selectedAnnotationId = null; fullRedraw(); state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
 $("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); fullRedraw(); } };
 function openFolderManageDialog(defaultParent) {
   renderFolderManageList();
