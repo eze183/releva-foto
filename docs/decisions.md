@@ -318,3 +318,41 @@ persistentes reusados entre aperturas (cámara, editor de marcado, etc.).
 del DOM que persiste entre múltiples "sesiones" de uso (se abre y cierra varias veces
 sin recrearse) debe registrar esos listeners una única vez, no en cada apertura —
 patrón a repetir si se agrega, por ejemplo, zoom al editor de marcado.
+
+---
+
+## 14. Todas las formas del editor de marcado son objetos editables, salvo el trazo
+     libre
+
+**Decisión**: en `app.js`, flecha, recuadro y texto viven juntos en
+`state.annotations` como objetos (`{id, type, ...campos propios}`), no como píxeles
+horneados en `state.history`. Comparten un único sistema de selección
+(`state.selectedAnnotationId`), manijas (`annotationHandles()`/`drawHandles()`) e
+interacción táctil (tocar selecciona, arrastrar el cuerpo mueve, arrastrar una manija
+ajusta, mantener presionado sin mover borra con confirmación). El trazo libre queda
+deliberadamente afuera de este sistema — sigue siendo pixel-based en `state.history`,
+sin selección ni manijas.
+
+**Por qué**: extiende la decisión #11 (texto como objeto vectorial) a flecha y
+recuadro, a pedido explícito del usuario ("todos los elementos... deben poder
+moverse y ajustarse"). No se incluyó el trazo libre porque no se pidió — un trazo a
+mano alzada es una secuencia de puntos, no una forma con parámetros simples
+(posición/tamaño) que tenga sentido ajustar con manijas; convertirlo en editable
+requeriría guardar todo el path como lista de puntos y decidir qué significa
+"redimensionar" un garabato, que es un problema bastante distinto y no se pidió.
+
+**Consecuencia importante**: como flecha/recuadro/texto ya no pasan por
+`state.history`, el botón **"Deshacer" quedó acotado a revertir sólo el trazo
+libre**. Esto es un cambio de comportamiento respecto a antes de la sesión 5 (cuando
+"Deshacer" sí revertía cualquier forma, porque todo compartía el mismo historial de
+píxeles) — se le avisó explícitamente al usuario en el resumen de la sesión 6 para
+que no lo confunda con un bug.
+
+**Trade-off aceptado**: no hay undo/redo real para mover, redimensionar o borrar una
+anotación — sólo existe el estado actual y "eliminar" (mantener presionado). Si en el
+futuro se pide poder deshacer un movimiento o un borrado accidental, hay que sumar un
+historial de operaciones sobre `state.annotations` (distinto del historial de píxeles
+que ya existe para el trazo libre) — no es una extensión trivial del sistema actual.
+
+**Dónde vive**: `app.js`, desde `const canvas = ...` hasta los listeners
+`pointerdown`/`pointermove`/`pointerup`/`pointercancel` del canvas del editor.

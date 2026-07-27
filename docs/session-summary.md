@@ -255,3 +255,43 @@ foto ya tomada, al verla en detalle.
 Browser pane (incluyendo simulación de `getUserMedia` con `canvas.captureStream()` y
 mock de `MediaStreamTrack.getCapabilities()`/`applyConstraints()` para probar ambos
 caminos de zoom de cámara) sin errores de consola.
+
+---
+
+## Sesión 6 — Flechas y recuadros editables como el texto (24/07/2026)
+
+**Disparador**: seguimiento inmediato de la sesión 5, mismo día. El usuario pidió que
+**todos** los elementos del editor de marcado (no sólo el texto) se puedan mover y
+ajustar después de agregados: flechas con posición/longitud/dirección editables,
+recuadros con posición/tamaño editables, texto con posición y ahora también tamaño de
+letra editables.
+
+**Se hizo**:
+- **Flechas y recuadros pasaron de píxeles horneados a objetos vivos**, mismo
+  criterio que ya se había aplicado al texto en la sesión 5. Los tres tipos ahora
+  viven juntos en `state.annotations` (`{id, type, ...}`), con una única lista de
+  selección (`state.selectedAnnotationId`) y un sistema de manijas compartido
+  (`annotationHandles()`, `drawHandles()`) — el trazo libre (herramienta "Trazo")
+  queda sin cambios, pixel-based en `state.history`, porque no se pidió que fuera
+  editable.
+- **Interacción unificada por tipo** (tocar una forma la selecciona; mostrar
+  manijas; arrastrar el cuerpo mueve, arrastrar una manija ajusta; mantener
+  presionado sin mover borra, con confirmación):
+  - Flecha: dos manijas (inicio/fin) — arrastrar cualquiera cambia longitud y
+    dirección de ese extremo, sin mover el otro.
+  - Recuadro: cuatro manijas (una por esquina) — arrastrar una la redimensiona,
+    manteniendo la esquina opuesta como ancla fija.
+  - Texto: una manija a la derecha del texto — arrastrarla escala `fontSize`
+    proporcionalmente a la distancia arrastrada (aproximación por
+    `context.measureText()`, no es una medida exacta pero se ve bien en uso).
+- **Cambio de comportamiento en "Deshacer"**: como flechas/recuadros/texto ya no
+  pasan por `state.history`, "Deshacer" quedó acotado a revertir sólo el trazo
+  libre. Las otras formas se quitan seleccionando + mantener presionado, no con
+  "Deshacer" — se le avisó explícitamente al usuario porque es un cambio de
+  comportamiento respecto a antes de la sesión 5.
+- Un bump de `sw.js` en esta sesión (v19).
+
+**Resultado**: los tres tipos de forma completamente editables después de agregados,
+verificado paso a paso en el Browser pane (crear, mover cuerpo, arrastrar cada
+manija, long-press para borrar, "Deshacer" no afecta formas, "Listo" exporta sin
+manijas horneadas en la imagen final) sin errores de consola.

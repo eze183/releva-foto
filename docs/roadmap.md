@@ -5,8 +5,8 @@
 > sesión. Este archivo es el estado *actual* — resume qué está hecho, qué falta y qué
 > ideas quedaron abiertas sin comprometerse a implementarlas.
 
-_Última actualización: sesión del 24/07/2026 (selección múltiple de fotos, editor de
-marcado con texto movible y herramientas de un solo uso, zoom de cámara y de foto)._
+_Última actualización: sesión del 24/07/2026 (flechas, recuadros y texto totalmente
+editables en el editor de marcado — mover y redimensionar/redirigir)._
 
 ## Estado actual — qué está implementado y verificado
 
@@ -16,10 +16,15 @@ marcado con texto movible y herramientas de un solo uso, zoom de cámara y de fo
       fallback al `<input capture>` nativo si no hay soporte o se niega el permiso.
       Resuelve el bug de pérdida de fotos en Android (ver `docs/decisions.md`).
 - [x] Selección desde galería del teléfono (`<input type="file">`).
-- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto (movible con
-      arrastre, borrable con long-press), trazo libre, deshacer, selector de color
-      (5 colores). Cada herramienta es de un solo uso — se desactiva sola después de
+- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto y trazo libre.
+      Flechas, recuadros y texto son **editables después de agregados** — tocarlos
+      los selecciona (aparecen manijas), arrastrar el cuerpo los mueve, arrastrar una
+      manija los ajusta (flecha: longitud/dirección de cada extremo; recuadro:
+      tamaño desde cualquier esquina; texto: tamaño de letra), mantener presionado
+      sin mover borra con confirmación. El trazo libre no es editable (deshacer
+      normal). Cada herramienta es de un solo uso — se desactiva sola después de
       agregar una marca, así tocar la foto para mirarla no dibuja nada por accidente.
+      "Deshacer" sólo revierte trazo libre.
 - [x] Almacenamiento en **IndexedDB** (fotos como `Blob`), con migración automática
       desde la versión anterior en `localStorage`.
 - [x] Editar nombre/carpeta/nota de una foto ya guardada.
