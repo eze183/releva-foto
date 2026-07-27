@@ -1,4 +1,4 @@
-const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false, photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null };
+const state = { photos: [], folders: [{ name: "General", parent: null }], activeFolder: null, pendingImage: null, pendingBlob: null, annotatedImage: null, activePhoto: null, tool: "arrow", color: "#ec3013", history: [], textAnnotations: [], lastDrawEnd: null, drawing: false, start: null, cameraStream: null, facingMode: "environment", cameraZoom: 1, folderSelection: new Set(), folderSelectMode: false, photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null };
 const $ = (selector) => document.querySelector(selector);
 const views = ["galleryView", "folderView", "captureView", "editorView", "detailView"];
 
@@ -247,14 +247,97 @@ function openEdit() {
 const canvas = $("#annotationCanvas"); const context = canvas.getContext("2d"); let editorImage = new Image();
 function drawBase() { context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(editorImage, 0, 0, canvas.width, canvas.height); }
 function snapshot() { state.history.push(context.getImageData(0, 0, canvas.width, canvas.height)); }
-function startEditor() { editorImage = new Image(); editorImage.onload = () => { const ratio = Math.min(1200 / editorImage.width, 900 / editorImage.height, 1); canvas.width = Math.round(editorImage.width * ratio); canvas.height = Math.round(editorImage.height * ratio); drawBase(); state.history = [context.getImageData(0, 0, canvas.width, canvas.height)]; showView("editorView"); }; editorImage.src = state.annotatedImage || state.pendingImage; }
+function renderShapeLayer() { context.putImageData(state.history.at(-1), 0, 0); }
+function renderTextLayer() {
+  state.textAnnotations.forEach((t) => { context.fillStyle = t.color; context.font = t.font; context.fillText(t.text, t.x, t.y); });
+}
+function fullRedraw() { renderShapeLayer(); renderTextLayer(); }
+function startEditor() {
+  editorImage = new Image();
+  editorImage.onload = () => {
+    const ratio = Math.min(1200 / editorImage.width, 900 / editorImage.height, 1);
+    canvas.width = Math.round(editorImage.width * ratio); canvas.height = Math.round(editorImage.height * ratio);
+    drawBase();
+    state.history = [context.getImageData(0, 0, canvas.width, canvas.height)];
+    state.textAnnotations = []; state.lastDrawEnd = null;
+    showView("editorView");
+  };
+  editorImage.src = state.annotatedImage || state.pendingImage;
+}
 function point(event) { const rect = canvas.getBoundingClientRect(); const touch = event.touches?.[0] || event; return { x: (touch.clientX - rect.left) * canvas.width / rect.width, y: (touch.clientY - rect.top) * canvas.height / rect.height }; }
 function setupStroke() { context.strokeStyle = state.color; context.fillStyle = state.color; context.lineWidth = Math.max(4, canvas.width / 180); context.lineCap = "round"; context.font = `bold ${Math.max(20, canvas.width / 23)}px sans-serif`; }
 function drawArrow(start, end) { setupStroke(); const angle = Math.atan2(end.y - start.y, end.x - start.x); const size = Math.max(15, canvas.width / 32); context.beginPath(); context.moveTo(start.x, start.y); context.lineTo(end.x, end.y); context.lineTo(end.x - size * Math.cos(angle - Math.PI / 6), end.y - size * Math.sin(angle - Math.PI / 6)); context.moveTo(end.x, end.y); context.lineTo(end.x - size * Math.cos(angle + Math.PI / 6), end.y - size * Math.sin(angle + Math.PI / 6)); context.stroke(); }
-function drawShape(end) { context.putImageData(state.history.at(-1), 0, 0); if (state.tool === "arrow") drawArrow(state.start, end); if (state.tool === "box") { setupStroke(); context.strokeRect(state.start.x, state.start.y, end.x - state.start.x, end.y - state.start.y); } if (state.tool === "draw") { setupStroke(); context.beginPath(); context.moveTo(state.start.x, state.start.y); context.lineTo(end.x, end.y); context.stroke(); state.start = end; state.history[state.history.length - 1] = context.getImageData(0, 0, canvas.width, canvas.height); } }
-canvas.addEventListener("pointerdown", (event) => { const p = point(event); if (state.tool === "text") { const label = prompt("Texto a agregar:"); if (label) { setupStroke(); context.fillText(label, p.x, p.y); snapshot(); } return; } state.drawing = true; state.start = p; canvas.setPointerCapture(event.pointerId); });
-canvas.addEventListener("pointermove", (event) => { if (state.drawing) drawShape(point(event)); });
-canvas.addEventListener("pointerup", () => { if (!state.drawing) return; state.drawing = false; snapshot(); });
+function drawShape(end) {
+  state.lastDrawEnd = end;
+  renderShapeLayer();
+  if (state.tool === "arrow") drawArrow(state.start, end);
+  if (state.tool === "box") { setupStroke(); context.strokeRect(state.start.x, state.start.y, end.x - state.start.x, end.y - state.start.y); }
+  if (state.tool === "draw") { setupStroke(); context.beginPath(); context.moveTo(state.start.x, state.start.y); context.lineTo(end.x, end.y); context.stroke(); state.start = end; state.history[state.history.length - 1] = context.getImageData(0, 0, canvas.width, canvas.height); }
+  renderTextLayer();
+}
+function finalizeShape() {
+  renderShapeLayer();
+  if (state.tool === "arrow" && state.lastDrawEnd) drawArrow(state.start, state.lastDrawEnd);
+  if (state.tool === "box" && state.lastDrawEnd) { setupStroke(); context.strokeRect(state.start.x, state.start.y, state.lastDrawEnd.x - state.start.x, state.lastDrawEnd.y - state.start.y); }
+  snapshot();
+  fullRedraw();
+}
+function textHitTest(p) {
+  for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
+    const t = state.textAnnotations[i];
+    context.font = t.font;
+    const width = context.measureText(t.text).width;
+    const fontSizeMatch = /(\d+(?:\.\d+)?)px/.exec(t.font);
+    const height = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 20;
+    const pad = 12;
+    if (p.x >= t.x - pad && p.x <= t.x + width + pad && p.y >= t.y - height - pad && p.y <= t.y + pad) return t;
+  }
+  return null;
+}
+let textLongPressTimer = null;
+let textLongPressStartPos = null;
+canvas.addEventListener("pointerdown", (event) => {
+  const p = point(event);
+  const hitText = textHitTest(p);
+  if (hitText) {
+    textLongPressStartPos = p;
+    textLongPressTimer = setTimeout(() => {
+      textLongPressTimer = null;
+      if (confirm(`¿Eliminar el texto "${hitText.text}"?`)) {
+        state.textAnnotations = state.textAnnotations.filter((t) => t.id !== hitText.id);
+        fullRedraw();
+      }
+    }, 550);
+    return;
+  }
+  if (state.tool === "text") {
+    const label = prompt("Texto a agregar:");
+    if (label) {
+      setupStroke();
+      state.textAnnotations.push({ id: crypto.randomUUID(), x: p.x, y: p.y, text: label, color: state.color, font: context.font });
+      fullRedraw();
+      state.tool = "arrow";
+      document.querySelectorAll(".tool[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === "arrow"));
+    }
+    return;
+  }
+  state.drawing = true; state.start = p; canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener("pointermove", (event) => {
+  if (textLongPressTimer) {
+    const p = point(event);
+    if (textLongPressStartPos && Math.hypot(p.x - textLongPressStartPos.x, p.y - textLongPressStartPos.y) > 15) { clearTimeout(textLongPressTimer); textLongPressTimer = null; }
+    return;
+  }
+  if (state.drawing) drawShape(point(event));
+});
+canvas.addEventListener("pointerup", () => {
+  if (textLongPressTimer) { clearTimeout(textLongPressTimer); textLongPressTimer = null; return; }
+  if (!state.drawing) return;
+  state.drawing = false;
+  finalizeShape();
+});
+canvas.addEventListener("pointercancel", () => { if (textLongPressTimer) { clearTimeout(textLongPressTimer); textLongPressTimer = null; } });
 
 document.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
@@ -430,8 +513,8 @@ $("#cameraInput").onchange = (event) => { handleImage(event.target.files[0]); ev
 $("#libraryInput").onchange = (event) => { handleImage(event.target.files[0]); event.target.value = ""; };
 $("#cameraShutter").onclick = capturePhoto; $("#cameraCancel").onclick = closeCamera; $("#cameraFlip").onclick = flipCamera;
 $("#homeNumber").oninput = updateSuggestedName; $("#blockNumber").oninput = updateSuggestedName;
-$("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
-$("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); context.putImageData(state.history.at(-1), 0, 0); } };
+$("#annotateButton").onclick = startEditor; $("#saveMarksButton").onclick = () => { fullRedraw(); state.annotatedImage = canvas.toDataURL("image/jpeg", .9); $("#photoPreview").src = state.annotatedImage; showView("captureView"); };
+$("#undoButton").onclick = () => { if (state.history.length > 1) { state.history.pop(); fullRedraw(); } };
 function openFolderManageDialog(defaultParent) {
   renderFolderManageList();
   $("#newFolderParent").innerHTML = '<option value="">— Nivel principal —</option>' + folderOptionsHTML();
