@@ -356,3 +356,98 @@ que ya existe para el trazo libre) — no es una extensión trivial del sistema 
 
 **Dónde vive**: `app.js`, desde `const canvas = ...` hasta los listeners
 `pointerdown`/`pointermove`/`pointerup`/`pointercancel` del canvas del editor.
+
+---
+
+## 15. La cámara no se cierra al disparar (modo ráfaga) y la foto se guarda sola
+
+**Decisión**: cada disparo guarda la foto directo en IndexedDB con un nombre
+automático (`"<Carpeta> - 001"`) y deja la cámara abierta. No hay formulario de
+detalles antes de guardar: nombre, nota y marcado son posteriores y opcionales,
+desde el detalle de la foto. Se eliminó la vista `captureView`.
+
+**Por qué**: el usuario reportó que el relevamiento se volvía lento porque había que
+tocar "Guardar" foto por foto — el ciclo real era disparar → cerrar cámara →
+completar formulario → guardar → reabrir cámara, 4 toques extra por foto. En el campo
+la operación dominante es sacar muchas fotos seguidas del mismo sitio; los metadatos
+son la excepción, no la regla, y por lo tanto no pueden estar en el camino crítico.
+
+**Trade-off aceptado**: las fotos quedan con nombre genérico hasta que alguien las
+renombre. Es reversible en cualquier momento (botón "Datos" en el detalle) y el
+número correlativo por carpeta ya alcanza para ubicarlas al exportar.
+
+**Dónde vive**: `app.js` — `openCameraFor()`, `capturePhoto()`, `savePhotoBlob()`,
+`renderBurst()`, `finishCamera()`.
+
+---
+
+## 16. Las carpetas tienen id propio; el nombre dejó de ser la clave primaria
+
+**Decisión**: `state.folders` guarda `{id, name, parentId}` y cada foto guarda
+`folderId`. La carpeta "General" tiene el id fijo `"general"` (constante `ROOT_ID`).
+La migración desde el formato anterior corre una sola vez al abrir la app
+(`migrateFolderShape()`, `migratePhotoFolders()`, `backfillSequences()`).
+
+**Por qué**: con el nombre como clave, "Vivienda 1" sólo podía existir una vez en toda
+la app — imposible tener la misma numeración de viviendas en dos manzanas distintas,
+que es exactamente la forma de un relevamiento. Además renombrar obligaba a reescribir
+cada foto de la carpeta en IndexedDB.
+
+**Consecuencia**: la unicidad de nombre ahora se valida **entre hermanas**, no
+globalmente. Renombrar es instantáneo y no toca las fotos (por eso una foto llamada
+"Baño - 001" conserva su nombre si después se renombra la carpeta — el nombre de la
+foto es un dato propio, no una vista del nombre de la carpeta).
+
+**Implicación para el futuro**: cualquier lógica nueva que identifique una carpeta
+tiene que usar el id. Buscar por nombre sólo es válido para mostrar o para el
+buscador.
+
+---
+
+## 17. Sin desplegable de jerarquía: el padre lo define el contexto
+
+**Decisión**: crear una carpeta pide **un solo campo, el nombre**. El padre sale de
+dónde se tocó el botón: desde el home es de nivel principal, desde adentro de una
+carpeta es subcarpeta de esa. Renombrar/mover/eliminar viven en un menú **⋮ en cada
+tarjeta de carpeta**. Se eliminó el diálogo de gestión `#folderDialog`.
+
+**Por qué**: el usuario reportó que el `<select>` de carpeta padre "no funciona del
+todo bien o no es cómodo". El problema de fondo no era el widget sino que pedía una
+respuesta que la app ya tenía: si estás parado dentro de "Manzana 3" y tocás "Nueva
+subcarpeta", el padre no es ambiguo. Además la jerarquía sangrada con espacios
+ideográficos dentro de un `<option>` es ilegible en un teléfono. Sumado a eso, las
+operaciones de carpeta estaban repartidas en dos mecanismos distintos (renombrar y
+borrar en un diálogo, mover con long-press y barra inferior) — el menú ⋮ las junta
+en un solo lugar descubrible, y el long-press queda sólo para operaciones en lote.
+
+**Cambio de comportamiento respecto a la decisión #10**: borrar una carpeta ahora
+manda sus fotos a la **carpeta de arriba** (su padre), no a "General". Con jerarquía
+real es lo que espera cualquiera, y "General" sigue siendo el respaldo cuando la
+carpeta borrada era de nivel principal. "General" sigue protegida (no se puede
+renombrar, mover ni borrar).
+
+---
+
+## 18. Las marcas se guardan junto a la foto, sobre el original intacto
+
+**Decisión**: al guardar el marcado, la foto conserva `originalBlob` (la imagen sin
+marcas, guardada la primera vez que se marca) y `marks` (la lista de anotaciones como
+objetos). `blob` pasa a ser la versión horneada, que es la que se muestra y se
+exporta. Volver a "Marcar" reabre el editor sobre el original con todas las marcas
+como objetos editables. El trazo libre también es un objeto ahora
+(`{type:"draw", points:[…]}`), así que `state.history`/`getImageData` desaparecieron
+por completo y "Deshacer" volvió a aplicar a todas las formas.
+
+**Por qué**: hasta la sesión 6 el marcado sólo existía antes de guardar y era
+destructivo — una vez horneado no se podía corregir una flecha mal puesta, y cada
+pasada por el editor reescalaba la foto (a 1200×900) y la re-encodaba en JPEG,
+perdiendo justo el detalle que se necesita para documentar una patología. Guardar el
+original + las marcas resuelve las dos cosas de una: re-edición infinita y una sola
+generación de pérdida JPEG por foto, sin importar cuántas veces se la marque.
+
+**Trade-off aceptado**: una foto marcada ocupa aproximadamente el doble (original +
+horneada). Sólo las fotos marcadas, que en un relevamiento son minoría.
+
+**Nota**: esto reemplaza el mecanismo de historial pixel-based descrito en las
+decisiones #11 y #14 — el criterio de "todo lo editable vive como objeto" que esas
+decisiones establecían ahora se aplica a **todas** las herramientas, sin excepción.

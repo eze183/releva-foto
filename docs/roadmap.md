@@ -5,45 +5,60 @@
 > sesión. Este archivo es el estado *actual* — resume qué está hecho, qué falta y qué
 > ideas quedaron abiertas sin comprometerse a implementarlas.
 
-_Última actualización: sesión del 24/07/2026 (flechas, recuadros y texto totalmente
-editables en el editor de marcado — mover y redimensionar/redirigir)._
+_Última actualización: sesión del 10/08/2026 (rediseño del flujo — cámara en ráfaga,
+marcado diferido, carpetas con id propio y menú ⋮, buscador)._
 
 ## Estado actual — qué está implementado y verificado
 
-- [x] Registro fotográfico con nombre automático ("Foto vivienda n°X, manzana Y"),
-      nota, carpeta y fecha.
+- [x] **Cámara en modo ráfaga**: la cámara no se cierra al disparar. Cada foto se
+      guarda sola en la carpeta activa con nombre automático (`"<Carpeta> - 001"`),
+      con flash, contador y tira de miniaturas en la superposición. No hay formulario
+      antes de guardar — el ritmo de captura es un toque por foto.
 - [x] Cámara **dentro de la app** (`getUserMedia`, `<video>` en vivo + disparo), con
       fallback al `<input capture>` nativo si no hay soporte o se niega el permiso.
       Resuelve el bug de pérdida de fotos en Android (ver `docs/decisions.md`).
-- [x] Selección desde galería del teléfono (`<input type="file">`).
-- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto y trazo libre.
-      Flechas, recuadros y texto son **editables después de agregados** — tocarlos
-      los selecciona (aparecen manijas), arrastrar el cuerpo los mueve, arrastrar una
-      manija los ajusta (flecha: longitud/dirección de cada extremo; recuadro:
-      tamaño desde cualquier esquina; texto: tamaño de letra), mantener presionado
-      sin mover borra con confirmación. El trazo libre no es editable (deshacer
-      normal). Cada herramienta es de un solo uso — se desactiva sola después de
-      agregar una marca, así tocar la foto para mirarla no dibuja nada por accidente.
-      "Deshacer" sólo revierte trazo libre.
+- [x] Importar **varias** fotos de la galería del teléfono a la vez, con progreso
+      ("Importando 3 de 24..."), orden por fecha de captura para que la numeración
+      quede cronológica, y descarte de lo que no sea imagen.
+- [x] Marcado sobre la foto con canvas: flecha, recuadro, texto y trazo libre. **Las
+      cuatro herramientas son objetos editables** — tocarlos los selecciona (aparecen
+      manijas), arrastrar el cuerpo los mueve, arrastrar una manija los ajusta
+      (flecha: longitud/dirección de cada extremo; recuadro: tamaño desde cualquier
+      esquina; texto: tamaño de letra; el trazo libre se mueve pero no se
+      redimensiona), mantener presionado sin mover borra con confirmación.
+      "Deshacer" quita la última marca agregada, sea del tipo que sea. Cada
+      herramienta es de un solo uso — se desactiva sola después de agregar una marca.
+- [x] **Marcar una foto ya guardada, cuantas veces haga falta**: la foto conserva el
+      original sin marcas (`originalBlob`) y la lista de marcas (`marks`), así que
+      volver a "Marcar" reabre el editor con todo editable y sin acumular pérdida de
+      calidad JPEG.
 - [x] Almacenamiento en **IndexedDB** (fotos como `Blob`), con migración automática
-      desde la versión anterior en `localStorage`.
-- [x] Editar nombre/carpeta/nota de una foto ya guardada.
-- [x] Crear carpetas desde el formulario de agregar foto, la pantalla principal **y**
-      desde dentro de otra carpeta (como subcarpeta); renombrar y borrar carpetas
-      (excepto "General", protegida a propósito); borrar una carpeta reasigna sus
-      fotos directas a "General" y promueve sus subcarpetas un nivel.
+      desde `localStorage` y desde el formato anterior de carpetas por nombre.
+- [x] Editar nombre y nota de una foto guardada; moverla de carpeta desde la
+      selección múltiple.
+- [x] **Carpetas con id propio** (`{id, name, parentId}`): se puede repetir el mismo
+      nombre en padres distintos ("Vivienda 1" en dos manzanas) y renombrar es
+      instantáneo. La unicidad se valida entre carpetas hermanas.
+- [x] **Crear carpeta sin desplegable de jerarquía**: un solo campo, el nombre. El
+      padre lo define desde dónde se creó (home = nivel principal, dentro de una
+      carpeta = subcarpeta de esa).
+- [x] **Menú ⋮ en cada tarjeta de carpeta**: renombrar, crear subcarpeta, mover y
+      eliminar en un solo lugar. Borrar una carpeta manda sus fotos a la carpeta de
+      arriba y promueve sus subcarpetas un nivel. "General" sigue protegida.
 - [x] **Subcarpetas anidadas**: las carpetas forman una jerarquía real (no una lista
       plana), con navegación "subir un nivel" y modo de selección múltiple
       (mantener presionada una carpeta) para mover varias a la vez dentro de otra,
       con protección contra ciclos (no se puede mover una carpeta dentro de sí misma
       o de su propia subcarpeta).
+- [x] **Buscador** en la pantalla principal por nombre de carpeta, nombre de foto y
+      nota, con la ruta completa de cada resultado.
 - [x] Navegación por carpetas: la pantalla principal lista carpetas de nivel
       principal (con conteo recursivo incluyendo subcarpetas), hay que entrar a una
-      para ver sus subcarpetas y fotos. Agregar una foto desde adentro de una
-      carpeta precarga esa carpeta en el formulario.
+      para ver sus subcarpetas y fotos.
 - [x] Cámara con zoom táctil (pinch): usa el zoom de hardware del sensor cuando el
       dispositivo lo soporta (`MediaStreamTrack.applyConstraints`), con fallback a
-      zoom digital (`transform:scale()` sobre el video) cuando no.
+      zoom digital (`transform:scale()` sobre el video) cuando no. El zoom digital
+      **se refleja en la foto guardada** (el frame se recorta al capturar).
 - [x] Zoom táctil en la foto ya tomada (vista de detalle): pellizco para ampliar,
       arrastre de un dedo para paneo, doble tap para alternar 1x/2.5x. Implementado a
       mano porque el pinch-zoom nativo de la página queda deshabilitado al correr la
@@ -51,8 +66,8 @@ editables en el editor de marcado — mover y redimensionar/redirigir)._
 - [x] Selección múltiple de fotos dentro de una carpeta (mantener presionada una):
       mover, copiar o eliminar varias a la vez.
 - [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) con selección de qué carpetas
-      incluir (checkboxes, todas tildadas por defecto) — organiza por subcarpeta y
-      agrega un `registro.csv`. Comparte vía `navigator.share` si está disponible, si
+      incluir (checkboxes, todas tildadas por defecto) — respeta la **jerarquía real
+      de subcarpetas** en las rutas del zip y agrega un `registro.csv`. Comparte vía `navigator.share` si está disponible, si
       no descarga directo.
 - [x] PWA instalable: manifest con íconos propios (generados con
       `scripts/generate-icons.js`, sin dependencias), service worker con
@@ -69,6 +84,10 @@ editables en el editor de marcado — mover y redimensionar/redirigir)._
 
 ## Pendiente de confirmar por el usuario
 
+- [ ] Ritmo real de la ráfaga en el teléfono: cada disparo escribe un `Blob` en
+      IndexedDB antes de habilitar el siguiente. En el Browser pane no se pudo medir
+      el tiempo real (la pestaña oculta limita los timers a 1s), así que falta
+      confirmar en el teléfono que se pueden encadenar disparos sin sentir espera.
 - [ ] Uso real en el campo con la cámara in-app: se verificó con un `getUserMedia`
       mockeado (canvas → `captureStream()`) en el Browser pane, y el usuario confirmó
       que el fix resuelve el síntoma reportado, pero falta una sesión larga de uso
@@ -86,12 +105,14 @@ editables en el editor de marcado — mover y redimensionar/redirigir)._
 
 ## Ideas mencionadas pero no implementadas
 
-- [ ] Búsqueda por texto (nombre, vivienda, manzana, nota) — no se pidió todavía, sólo
-      se mencionó como posible mejora futura al principio del proyecto.
-- [ ] Re-anotar una foto ya guardada (hoy sólo se puede editar nombre/carpeta/nota de
-      una foto guardada, no volver a abrir el editor de marcado sobre ella).
 - [ ] Cambiar/reordenar el orden de las carpetas en la pantalla principal (hoy siguen
       el orden de creación).
+- [ ] Renumerar/renombrar en lote las fotos de una carpeta (hoy renombrar la carpeta
+      no toca el nombre de las fotos que ya tenía — ver decisión #16).
+- [ ] Recuperar el espacio de `originalBlob` de fotos marcadas hace mucho ("aplanar"
+      una foto para liberar el original a costa de perder la re-edición).
+- [ ] Deshacer un movimiento o un borrado de anotación (hoy "Deshacer" sólo quita la
+      última marca agregada, no revierte un ajuste).
 - [ ] Exportar directamente a PDF además de `.zip` (el proyecto hermano `app informes`
       ya tiene un motor de maquetado A4 con `jsPDF` que podría servir de referencia si
       esto se llegara a pedir).

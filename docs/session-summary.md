@@ -295,3 +295,62 @@ letra editables.
 verificado paso a paso en el Browser pane (crear, mover cuerpo, arrastrar cada
 manija, long-press para borrar, "Deshacer" no afecta formas, "Listo" exporta sin
 manijas horneadas en la imagen final) sin errores de consola.
+
+---
+
+## Sesión 7 — Rediseño del flujo: ráfaga, carpetas y carpetas con id (10/08/2026)
+
+**Disparador**: el usuario pidió "optimizar la app para que sea simple y práctica".
+Dos dolores concretos: (1) el manejo de carpetas es engorroso y el `<select>` de
+jerarquía "no funciona del todo bien o no es cómodo"; (2) sacar fotos es lento porque
+el formulario de detalles se abre apenas se dispara y hay que tocar "Guardar" en cada
+foto. Pidió además cualquier otra mejora que se viera necesaria.
+
+**Se hizo**:
+- **Cámara en modo ráfaga**: la cámara ya no se cierra al disparar. Cada disparo
+  guarda la foto directo en IndexedDB con nombre automático (`"<Carpeta> - 001"`),
+  con flash, contador y tira de miniaturas en la propia superposición. El formulario
+  de detalles desapareció del camino crítico: nombre, nota y marcado pasaron a ser
+  opcionales y posteriores, desde el detalle de cada foto. Se eliminó la vista
+  `captureView` entera (selector "Cámara / Galería" + formulario).
+- **Marcado diferido sobre fotos ya guardadas** (pendiente viejo del roadmap): botón
+  "Marcar" en el detalle. Las marcas se guardan como objetos junto a la foto
+  (`photo.marks`) sobre el original intacto (`photo.originalBlob`), así una foto se
+  puede re-marcar cuantas veces haga falta sin acumular pérdida de JPEG y sin quedar
+  atada a las marcas que ya tenía.
+- **Carpetas: se eliminó el `<select>` de jerarquía**. El padre lo define desde dónde
+  se creó la carpeta (home = nivel principal, dentro de una carpeta = subcarpeta).
+  Se eliminó el diálogo de gestión `#folderDialog`; renombrar/mover/eliminar viven
+  ahora en un menú **⋮ por tarjeta de carpeta**.
+- **Carpetas con id propio** (migración de datos): antes la clave primaria era el
+  nombre. Ahora `{id, name, parentId}` y las fotos guardan `folderId`. Permite
+  nombres repetidos en distintos padres y hace renombrar instantáneo.
+- **Bugs corregidos**: el zoom digital ahora se refleja en la foto capturada (antes
+  se guardaba el frame completo, sin acercar); el editor ya no reescala a 1200×900
+  (ahora hasta 2560 y sobre el original); todo nombre se escapa antes de ir a HTML;
+  crear una carpeta duplicada avisa en vez de fallar en silencio.
+- **Extras**: buscador por nombre/nota/carpeta en el home, importar varias fotos de
+  la galería a la vez, toasts de confirmación, y el `.zip` de exportación ahora
+  respeta la jerarquía real de subcarpetas.
+- Bump de `sw.js` a v20.
+
+**Resultado**: verificado en el Browser pane con datos sembrados en formato viejo — la
+migración a ids se ejecuta bien (carpetas, fotos y secuencias), la ráfaga guarda cada
+disparo sin cerrar la cámara, marcar una foto guardada persiste y se puede re-editar,
+crear/renombrar/mover/borrar carpetas funciona desde el menú ⋮, borrar una carpeta
+manda sus fotos a la carpeta de arriba, y el zip sale con la jerarquía anidada. Sin
+errores de consola.
+
+**Ajuste posterior (misma sesión)**: el usuario pidió poder subir varias fotos de
+archivo a la vez. El atributo `multiple` ya había quedado en el `<input>` de esta
+misma sesión (lo que veía era la versión vieja, todavía sin commitear ni deployar),
+así que se aprovechó para completar lo que le faltaba al import en lote: barra de
+progreso ("Importando 3 de 24..."), orden por `lastModified` para que la numeración
+correlativa quede cronológica, descarte de archivos que no sean imagen con aviso, y
+el botón deshabilitado mientras corre. Bump de `sw.js` a v21.
+
+**Nota de verificación**: al probar en el Browser pane, el service worker sirvió el
+`app.js` viejo desde caché en la primera recarga posterior al cambio (el SW nuevo
+recién instala y activa *después* de que la página ya cargó). Hay que desregistrar el
+SW y borrar las cachés antes de verificar un cambio de código, o se testea la versión
+anterior sin darse cuenta — pasó y dio un falso negativo.
