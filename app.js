@@ -1,4 +1,3 @@
-const ROOT_ID = "general";
 const state = {
   photos: [], folders: [], activeFolderId: null, search: "",
   activePhoto: null, editorPhoto: null,
@@ -86,19 +85,15 @@ async function migrateFromLocalStorage() {
 // Ahora cada carpeta tiene un id estable y las fotos guardan `folderId`.
 function newId() { return crypto.randomUUID ? crypto.randomUUID() : `f${Date.now()}${Math.random().toString(16).slice(2)}`; }
 function migrateFolderShape(stored) {
-  if (!stored || !stored.length) return { folders: [{ id: ROOT_ID, name: "General", parentId: null }], nameToId: { General: ROOT_ID }, changed: true };
+  if (!stored || !stored.length) return { folders: [], nameToId: null, changed: false };
   if (stored[0] && stored[0].id) return { folders: stored, nameToId: null, changed: false };
   const legacy = typeof stored[0] === "string" ? stored.map((name) => ({ name, parent: null })) : stored;
   const nameToId = {};
   const folders = legacy.map((folder) => {
-    const id = folder.name === "General" ? ROOT_ID : newId();
+    const id = newId();
     nameToId[folder.name] = id;
     return { id, name: folder.name, parentId: null, _legacyParent: folder.parent };
   });
-  if (!nameToId.General) {
-    folders.unshift({ id: ROOT_ID, name: "General", parentId: null, _legacyParent: null });
-    nameToId.General = ROOT_ID;
-  }
   folders.forEach((folder) => {
     folder.parentId = folder._legacyParent ? nameToId[folder._legacyParent] || null : null;
     delete folder._legacyParent;
@@ -108,10 +103,22 @@ function migrateFolderShape(stored) {
 async function migratePhotoFolders(nameToId) {
   for (const photo of state.photos) {
     if (photo.folderId) continue;
-    photo.folderId = nameToId[photo.folder] || ROOT_ID;
+    photo.folderId = nameToId[photo.folder] || null;
     delete photo.folder;
     await idbPutPhoto(photo);
   }
+}
+// Red de seguridad: una foto que quedó apuntando a una carpeta inexistente (dato
+// viejo, migración a medias) no puede volverse invisible. No hay carpeta por defecto,
+// así que se crea una de rescate sólo si de verdad hace falta.
+async function rescueOrphanPhotos() {
+  const known = new Set(state.folders.map((folder) => folder.id));
+  const orphans = state.photos.filter((photo) => !known.has(photo.folderId));
+  if (!orphans.length) return;
+  const folder = { id: newId(), name: "Fotos sueltas", parentId: null };
+  state.folders.push(folder);
+  await idbSetFolders(state.folders);
+  for (const photo of orphans) { photo.folderId = folder.id; await idbPutPhoto(photo); }
 }
 // Las fotos viejas no tienen número de secuencia; se los asigno por orden de
 // creación dentro de cada carpeta para que los nombres nuevos sigan contando bien.
@@ -148,9 +155,9 @@ async function loadAll() {
     const stored = await idbGetFolders();
     const { folders, nameToId, changed } = migrateFolderShape(stored);
     state.folders = folders;
-    if (!state.folders.some((folder) => folder.id === ROOT_ID)) state.folders.unshift({ id: ROOT_ID, name: "General", parentId: null });
     if (changed) await idbSetFolders(state.folders);
     if (nameToId) await migratePhotoFolders(nameToId);
+    await rescueOrphanPhotos();
     await backfillSequences();
   } catch (error) {
     console.error(error);
@@ -213,7 +220,9 @@ function renderHome() {
   $("#homeBrowse").hidden = !!query;
   $("#searchResults").hidden = !query;
   if (query) { renderSearchResults(query); return; }
-  $("#folderGrid").innerHTML = childFolders(null).map(folderCardHTML).join("");
+  const roots = childFolders(null);
+  $("#homeEmptyState").hidden = roots.length > 0;
+  $("#folderGrid").innerHTML = roots.map(folderCardHTML).join("");
 }
 function renderSearchResults(query) {
   const folders = state.folders.filter((folder) => folder.name.toLowerCase().includes(query));
@@ -254,7 +263,8 @@ function goUpFromFolder() {
 // hace que el sistema mate la página y se pierda la foto. Cae al input nativo si falla.
 // Modo ráfaga: cada disparo guarda la foto directo y la cámara queda abierta. ---
 async function openCameraFor(folderId) {
-  const folder = folderById(folderId) || folderById(ROOT_ID);
+  const folder = folderById(folderId);
+  if (!folder) { showError("Elegí una carpeta antes de sacar fotos."); return; }
   state.captureFolderId = folder.id;
   state.burst = [];
   renderBurst();
@@ -274,6 +284,9 @@ async function openCameraFor(folderId) {
 }
 function requestCapture() {
   if (state.activeFolderId) { openCameraFor(state.activeFolderId); return; }
+  // Sin carpetas todavía no hay nada que elegir: se pide el nombre y se entra derecho
+  // a la cámara, que es el flujo de un relevamiento nuevo.
+  if (!state.folders.length) { state.afterFolderPick = (id) => openCameraFor(id); openFolderCreateDialog(null); return; }
   openFolderPickDialog((folderId) => openCameraFor(folderId));
 }
 // El listener se registra una sola vez (más abajo); acá sólo se actualiza qué
@@ -319,7 +332,8 @@ function finishCamera() {
   state.burst = [];
 }
 async function savePhotoBlob(blob, folderId) {
-  const folder = folderById(folderId) || folderById(ROOT_ID);
+  const folder = folderById(folderId);
+  if (!folder) throw new Error("La carpeta destino ya no existe.");
   const seq = nextSeqFor(folder.id);
   const photo = { id: newId(), blob, name: autoName(folder, seq), folderId: folder.id, note: "", createdAt: new Date().toISOString(), seq };
   await idbPutPhoto(photo);
@@ -379,7 +393,8 @@ async function flipCamera() {
 // fecha de captura (para que la numeración quede cronológica), descarta lo que no sea
 // imagen y muestra progreso — sin eso, elegir 40 fotos parece que no hace nada.
 async function importFiles(files, targetId) {
-  const folderId = targetId || state.activeFolderId || ROOT_ID;
+  const folderId = targetId || state.activeFolderId;
+  if (!folderById(folderId)) { showError("Entrá a una carpeta antes de importar fotos."); return; }
   const images = [...files]
     .filter((file) => (file.type || "").startsWith("image/"))
     .sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0) || a.name.localeCompare(b.name));
@@ -782,7 +797,7 @@ document.addEventListener("click", (event) => {
   if (folderOpen) {
     if (longPressTriggered) { longPressTriggered = false; return; }
     const id = folderOpen.dataset.folder;
-    if (state.folderSelectMode) { if (id !== ROOT_ID) toggleFolderSelection(id); return; }
+    if (state.folderSelectMode) { toggleFolderSelection(id); return; }
     state.activeFolderId = id; state.search = ""; $("#searchInput").value = ""; showFolderView(); return;
   }
   const card = event.target.closest(".photo-card");
@@ -816,9 +831,7 @@ document.addEventListener("pointerdown", (e) => {
   longPressTimer = setTimeout(() => {
     longPressTriggered = true;
     if (card.classList.contains("folder-open")) {
-      const id = card.dataset.folder;
-      if (id === ROOT_ID) return;
-      toggleFolderSelection(id);
+      toggleFolderSelection(card.dataset.folder);
     } else {
       togglePhotoSelection(card.dataset.id);
     }
@@ -848,10 +861,10 @@ function exitFolderSelectMode() {
 }
 $("#folderSelectCancel").onclick = exitFolderSelectMode;
 $("#folderSelectDelete").onclick = async () => {
-  const ids = [...state.folderSelection].filter((id) => id !== ROOT_ID);
+  const ids = [...state.folderSelection];
   if (!ids.length) return;
   const label = ids.length > 1 ? `las ${ids.length} carpetas seleccionadas` : `la carpeta "${folderById(ids[0])?.name}"`;
-  if (!confirm(`¿Borrar ${label}? Las fotos que tengan pasan a la carpeta de arriba.`)) return;
+  if (!confirm(`¿Eliminar ${label}?${deletionWarning(ids)}`)) return;
   for (const id of ids) await removeFolder(id);
   exitFolderSelectMode();
 };
@@ -868,7 +881,6 @@ function openMoveFolderDialog(ids) {
 $("#moveFolderDialog").addEventListener("close", () => { if (!state.folderSelectMode) state.folderSelection.clear(); });
 async function moveSelectedFoldersTo(targetId) {
   for (const id of state.folderSelection) {
-    if (id === ROOT_ID) continue;
     const folder = folderById(id);
     if (folder) folder.parentId = targetId || null;
   }
@@ -988,12 +1000,18 @@ function openFolderActions(id) {
   if (!folder) return;
   state.actionsFolderId = id;
   $("#folderActionsTitle").textContent = folder.name;
-  const protectedRoot = id === ROOT_ID;
-  document.querySelectorAll("[data-folder-action]").forEach((button) => {
-    const action = button.dataset.folderAction;
-    button.disabled = protectedRoot && action !== "sub";
-  });
   $("#folderActionsDialog").showModal();
+}
+// Borrar una carpeta se lleva todo lo que tiene adentro, así que el aviso dice
+// exactamente qué se pierde. Para conservar las fotos hay que moverlas antes.
+function deletionWarning(ids) {
+  const all = new Set(ids.flatMap((id) => [id, ...descendantIds(id)]));
+  const photos = state.photos.filter((photo) => all.has(photo.folderId)).length;
+  const subs = all.size - ids.length;
+  const parts = [];
+  if (subs) parts.push(`${subs} ${subs === 1 ? "subcarpeta" : "subcarpetas"}`);
+  if (photos) parts.push(`${photos} ${photos === 1 ? "foto" : "fotos"}`);
+  return parts.length ? ` Se borran también ${parts.join(" y ")}. No se puede deshacer.` : "";
 }
 function runFolderAction(action) {
   const id = state.actionsFolderId;
@@ -1003,30 +1021,21 @@ function runFolderAction(action) {
   if (action === "sub") { openFolderCreateDialog(id); return; }
   if (action === "rename") { renameFolder(id); return; }
   if (action === "move") { state.folderSelection = new Set([id]); state.folderSelectMode = false; openMoveFolderDialog([id]); return; }
-  if (action === "delete") {
-    const count = countPhotosRecursive(id);
-    const where = folder.parentId ? `"${folderById(folder.parentId)?.name}"` : '"General"';
-    const warning = count ? ` Sus ${count} ${count === 1 ? "foto pasa" : "fotos pasan"} a ${where}.` : "";
-    if (confirm(`¿Borrar la carpeta "${folder.name}"?${warning}`)) removeFolder(id);
-  }
+  if (action === "delete" && confirm(`¿Eliminar la carpeta "${folder.name}"?${deletionWarning([id])}`)) removeFolder(id);
 }
 async function removeFolder(id) {
-  if (id === ROOT_ID) return;
   const folder = folderById(id);
   if (!folder) return;
-  const fallbackId = folder.parentId && folderById(folder.parentId) ? folder.parentId : ROOT_ID;
+  const doomed = new Set([id, ...descendantIds(id)]);
   try {
-    childFolders(id).forEach((child) => { child.parentId = folder.parentId; });
-    const fallback = folderById(fallbackId);
-    for (const photo of photosIn(id)) {
-      photo.folderId = fallbackId;
-      photo.seq = nextSeqFor(fallbackId);
-      photo.name = autoName(fallback, photo.seq);
-      await idbPutPhoto(photo);
+    for (const photo of state.photos.filter((item) => doomed.has(item.folderId))) {
+      await idbDeletePhoto(photo.id);
+      releaseUrl(photo.id);
     }
-    state.folders = state.folders.filter((item) => item.id !== id);
+    state.photos = state.photos.filter((photo) => !doomed.has(photo.folderId));
+    state.folders = state.folders.filter((item) => !doomed.has(item.id));
     await saveFolders();
-    if (state.activeFolderId === id) state.activeFolderId = folder.parentId;
+    if (doomed.has(state.activeFolderId)) state.activeFolderId = folderById(folder.parentId) ? folder.parentId : null;
     if (state.activeFolderId) showFolderView(); else goHome();
   } catch (error) {
     console.error(error);
@@ -1035,7 +1044,7 @@ async function removeFolder(id) {
 }
 async function renameFolder(id) {
   const folder = folderById(id);
-  if (!folder || id === ROOT_ID) return;
+  if (!folder) return;
   const input = prompt("Nuevo nombre para la carpeta:", folder.name);
   if (!input || !input.trim() || input.trim() === folder.name) return;
   const name = input.trim();
@@ -1185,7 +1194,11 @@ function renderExportFolderList() {
     })
     .join("");
 }
-$("#exportButton").onclick = () => { renderExportFolderList(); $("#exportDialog").showModal(); };
+$("#exportButton").onclick = () => {
+  if (!state.photos.length) { showError("Todavía no hay fotos para exportar."); return; }
+  renderExportFolderList();
+  $("#exportDialog").showModal();
+};
 function setAllExportChecks(checked) { [...$("#exportFolderList").querySelectorAll("input[type=checkbox]")].forEach((box) => box.checked = checked); }
 $("#exportSelectAll").onclick = () => setAllExportChecks(true);
 $("#exportDeselectAll").onclick = () => setAllExportChecks(false);

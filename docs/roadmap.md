@@ -43,8 +43,10 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       padre lo define desde dónde se creó (home = nivel principal, dentro de una
       carpeta = subcarpeta de esa).
 - [x] **Menú ⋮ en cada tarjeta de carpeta**: renombrar, crear subcarpeta, mover y
-      eliminar en un solo lugar. Borrar una carpeta manda sus fotos a la carpeta de
-      arriba y promueve sus subcarpetas un nivel. "General" sigue protegida.
+      eliminar en un solo lugar. **No hay carpeta por defecto ni carpetas
+      protegidas**: la app arranca vacía y toda carpeta se puede renombrar, mover y
+      eliminar. Eliminar se lleva sus subcarpetas y sus fotos, con un aviso que dice
+      exactamente cuánto se pierde (para conservarlas hay que moverlas antes).
 - [x] **Subcarpetas anidadas**: las carpetas forman una jerarquía real (no una lista
       plana), con navegación "subir un nivel" y modo de selección múltiple
       (mantener presionada una carpeta) para mover varias a la vez dentro de otra,

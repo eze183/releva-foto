@@ -354,3 +354,38 @@ el botón deshabilitado mientras corre. Bump de `sw.js` a v21.
 recién instala y activa *después* de que la página ya cargó). Hay que desregistrar el
 SW y borrar las cachés antes de verificar un cambio de código, o se testea la versión
 anterior sin darse cuenta — pasó y dio un falso negativo.
+
+---
+
+## Sesión 8 — Se elimina la carpeta "General" (10/08/2026)
+
+**Disparador**: el usuario probó el rediseño en el teléfono y confirmó que funciona.
+Lo único a corregir: "no necesito que haya una carpeta por defecto. además no se puede
+eliminar y es molesto".
+
+**Se hizo**:
+- **Se eliminó "General" como concepto** (constante `ROOT_ID` incluida). Una
+  instalación nueva arranca sin carpetas, con un estado vacío propio en el home.
+- **Ninguna carpeta está protegida**: renombrar, mover y eliminar funcionan en todas.
+  Se sacaron las guardas de `ROOT_ID` de la selección múltiple, el long-press, el
+  menú ⋮ y el borrado.
+- **Eliminar una carpeta borra sus subcarpetas y sus fotos**, con un aviso que cuenta
+  exactamente qué se pierde (`deletionWarning()`). Reemplaza el comportamiento
+  anterior de "las fotos suben al padre", que dependía de que existiera un respaldo.
+- **`rescueOrphanPhotos()`**: red de seguridad al abrir la app — una foto que quedó
+  apuntando a una carpeta inexistente va a una carpeta "Fotos sueltas", que sólo se
+  crea si de verdad hace falta. Antes ese caso caía en "General".
+- La cámara desde la barra inferior, sin ninguna carpeta creada, pide el nombre de la
+  carpeta y entra derecho a la cámara (antes abría un selector vacío).
+- Guardas nuevas: no se puede capturar, importar ni exportar sin carpeta/fotos, con
+  mensajes claros en vez de fallar en silencio.
+- Bump de `sw.js` a v22.
+
+**Resultado**: verificado en el Browser pane con la base vacía (instalación nueva) y
+con datos sembrados en formato viejo. Instalación nueva arranca sin carpetas y el
+flujo "cámara → pedir nombre → crear → ráfaga" funciona de punta a punta. Borrar
+"Barrio Norte" (2 fotos + subcarpeta con 1 foto) avisó "1 subcarpeta y 3 fotos",
+cancelar no tocó nada y confirmar dejó la base en cero. En la migración, "General"
+sobrevive como carpeta común con sus fotos y ya se puede borrar; una foto sembrada
+apuntando a una carpeta inexistente terminó en "Fotos sueltas" en vez de desaparecer.
+Sin errores de consola.

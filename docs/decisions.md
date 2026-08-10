@@ -451,3 +451,43 @@ horneada). Sólo las fotos marcadas, que en un relevamiento son minoría.
 **Nota**: esto reemplaza el mecanismo de historial pixel-based descrito en las
 decisiones #11 y #14 — el criterio de "todo lo editable vive como objeto" que esas
 decisiones establecían ahora se aplica a **todas** las herramientas, sin excepción.
+
+---
+
+## 19. No hay carpeta por defecto; borrar una carpeta borra lo que tiene adentro
+
+**Decisión**: se eliminó la carpeta "General" como concepto. Una instalación nueva
+arranca **sin ninguna carpeta** (pantalla vacía con "Creá una carpeta para empezar"),
+todas las carpetas son iguales — se pueden renombrar, mover y eliminar sin excepción —
+y **eliminar una carpeta borra también sus subcarpetas y sus fotos**, con un aviso que
+dice exactamente cuánto se pierde ("Se borran también 1 subcarpeta y 34 fotos. No se
+puede deshacer.").
+
+**Por qué**: reemplaza y revierte las decisiones #10 y la parte final de #17. El
+usuario lo dijo directo: "no necesito que haya una carpeta por defecto. además no se
+puede eliminar y es molesto". "General" existía sólo para ser el destino de respaldo
+de las fotos de una carpeta eliminada — era una carpeta que existía para resolver un
+problema del código, no del relevamiento, y el costo era una excepción permanente en
+la UI (un ítem que no se puede tocar, con acciones grises en su propio menú).
+
+Sacar el respaldo obliga a definir qué pasa al borrar. Se eligió "borrar se lleva
+todo" en vez de "las fotos suben al padre" porque es lo que hace cualquier gestor de
+archivos y no tiene sorpresas: con el comportamiento anterior, borrar una carpeta hacía
+aparecer 30 fotos mezcladas en la carpeta de arriba, que es un resultado que nadie
+pidió. La vía no destructiva sigue existiendo y es explícita: mover las fotos a otra
+carpeta antes (selección múltiple → "Mover a...").
+
+**Red de seguridad**: `rescueOrphanPhotos()` corre al abrir la app y, si encuentra
+fotos apuntando a una carpeta inexistente (dato viejo, migración a medias), crea una
+carpeta "Fotos sueltas" y las mete ahí. Sólo se crea si de verdad hace falta — una
+instalación sana nunca la ve.
+
+**Para instalaciones existentes**: su carpeta "General" **no se borra sola**; queda
+como una carpeta común más, con sus fotos intactas, y el usuario decide si la elimina
+o la renombra. Borrar datos del usuario en una migración no es algo que la app pueda
+decidir por su cuenta.
+
+**Implicación para el futuro**: no queda ninguna entidad protegida en la app. Si
+alguna vez se agrega una (una papelera, una carpeta de sistema), tiene que justificar
+por qué el usuario no puede tocarla — la lección de esta decisión es que una excepción
+permanente en la UI se paga en cada uso.
