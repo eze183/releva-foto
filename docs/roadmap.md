@@ -36,6 +36,14 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       desde `localStorage` y desde el formato anterior de carpetas por nombre.
 - [x] Editar nombre y nota de una foto guardada; moverla de carpeta desde la
       selección múltiple.
+- [x] **Notas en dos niveles, texto libre**: nota de carpeta (contexto de todo el
+      conjunto, bloque fijo arriba de la vista de carpeta y línea en su tarjeta) y
+      nota de foto. Las fotos con nota se distinguen en la grilla (marca sobre la
+      miniatura + la nota como subtítulo), la nota del detalle es el botón que abre su
+      propia edición, y al editar aparecen **notas rápidas**: chips con lo que el
+      usuario ya escribió, ordenados por frecuencia, para repetir con un toque.
+      Ambas notas entran en el buscador y en la exportación (columnas del CSV, y la
+      nota de carpeta también como `_nota.txt` dentro de su carpeta en el zip).
 - [x] **Carpetas con id propio** (`{id, name, parentId}`): se puede repetir el mismo
       nombre en padres distintos ("Vivienda 1" en dos manzanas) y renombrar es
       instantáneo. La unicidad se valida entre carpetas hermanas.

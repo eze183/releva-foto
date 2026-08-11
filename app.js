@@ -196,14 +196,18 @@ function showView(id) {
 }
 function formatDate(date) { return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(date)); }
 
+// Una nota que no se ve desde la grilla no sirve de nada: hay que poder barrer una
+// carpeta de un vistazo y saber cuál foto tiene algo escrito.
+const NOTE_ICON = `<svg class="note-flag" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`;
 function folderCardHTML(folder) {
   const count = countPhotosRecursive(folder.id);
   const subCount = childFolders(folder.id).length;
   const selected = state.folderSelection.has(folder.id) ? " selected" : "";
   const meta = `${count} ${count === 1 ? "foto" : "fotos"}${subCount ? ` · ${subCount} ${subCount === 1 ? "subcarpeta" : "subcarpetas"}` : ""}`;
+  const note = folder.note ? `<small class="card-note">${NOTE_ICON}${esc(folder.note)}</small>` : "";
   return `<div class="folder-card${selected}">
     <button type="button" class="folder-open" data-folder="${esc(folder.id)}">
-      <div><strong>${esc(folder.name)}</strong><small>${meta}</small></div>
+      <div><strong>${esc(folder.name)}</strong><small>${meta}</small>${note}</div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
     <button type="button" class="folder-menu" data-folder-menu="${esc(folder.id)}" aria-label="Opciones de ${esc(folder.name)}">⋮</button>
@@ -211,7 +215,9 @@ function folderCardHTML(folder) {
 }
 function photoCardHTML(photo, subtitle) {
   const selected = state.photoSelection.has(photo.id) ? " selected" : "";
-  return `<button class="photo-card${selected}" data-id="${esc(photo.id)}"><img src="${urlFor(photo)}" alt="${esc(photo.name)}" loading="lazy"><div><strong>${esc(photo.name)}</strong>${subtitle ? `<small>${esc(subtitle)}</small>` : ""}</div></button>`;
+  const flag = photo.note ? `<span class="photo-note-flag" aria-label="Con nota">${NOTE_ICON}</span>` : "";
+  const caption = photo.note ? `<small class="card-note">${esc(photo.note)}</small>` : subtitle ? `<small>${esc(subtitle)}</small>` : "";
+  return `<button class="photo-card${selected}" data-id="${esc(photo.id)}"><img src="${urlFor(photo)}" alt="${esc(photo.name)}" loading="lazy">${flag}<div><strong>${esc(photo.name)}</strong>${caption}</div></button>`;
 }
 
 function renderHome() {
@@ -225,7 +231,7 @@ function renderHome() {
   $("#folderGrid").innerHTML = roots.map(folderCardHTML).join("");
 }
 function renderSearchResults(query) {
-  const folders = state.folders.filter((folder) => folder.name.toLowerCase().includes(query));
+  const folders = state.folders.filter((folder) => `${folder.name} ${folder.note || ""}`.toLowerCase().includes(query));
   const photos = state.photos.filter((photo) => `${photo.name} ${photo.note || ""}`.toLowerCase().includes(query)).slice().reverse();
   const parts = [];
   if (folders.length) parts.push(`<p class="results-label">Carpetas</p><div class="folder-grid">${folders.map(folderCardHTML).join("")}</div>`);
@@ -241,6 +247,8 @@ function showFolderView() {
   const path = folderPath(folder.id).slice(0, -1);
   $("#folderViewPath").textContent = path.length ? path.join(" / ").toUpperCase() : "CARPETA";
   $("#folderViewTitle").textContent = folder.name;
+  $("#folderNoteText").textContent = folder.note || "Agregar una nota a esta carpeta";
+  $("#folderNoteCard").classList.toggle("empty", !folder.note);
   $("#subfolderGrid").innerHTML = subfolders.map(folderCardHTML).join("");
   $("#subfolderGrid").hidden = subfolders.length === 0;
   $("#photoGrid").innerHTML = photos.map((photo) => photoCardHTML(photo)).join("");
@@ -419,6 +427,11 @@ async function importFiles(files, targetId) {
   toast(`${saved} ${saved === 1 ? "foto agregada" : "fotos agregadas"}${notes.length ? ` · ${notes.join(", ")}` : ""}`);
 }
 
+function renderDetailNote(photo) {
+  const node = $("#detailNote");
+  node.textContent = photo.note || "Agregar una nota";
+  node.classList.toggle("empty", !photo.note);
+}
 function openDetail(id) {
   const photo = state.photos.find((item) => item.id === id); if (!photo) return;
   state.activePhoto = photo;
@@ -426,7 +439,7 @@ function openDetail(id) {
   $("#detailImage").src = urlFor(photo);
   $("#detailName").textContent = photo.name;
   $("#detailFolder").textContent = folderPath(photo.folderId).join(" / ");
-  $("#detailNote").textContent = photo.note || "Sin observaciones.";
+  renderDetailNote(photo);
   $("#detailDate").textContent = formatDate(photo.createdAt);
   $("#editForm").hidden = true; $("#detailReadView").hidden = false;
   resetPhotoZoom();
@@ -818,6 +831,8 @@ document.addEventListener("click", (event) => {
   if (photoTarget) applyPhotoTarget(photoTarget.dataset.photoTarget);
   const pickTarget = event.target.closest("[data-pick-folder]");
   if (pickTarget) resolveFolderPick(pickTarget.dataset.pickFolder);
+  const quickNote = event.target.closest("[data-quick-note]");
+  if (quickNote) { $("#editNote").value = quickNote.dataset.quickNote; renderQuickNotes(); }
 });
 
 let longPressTimer = null;
@@ -1018,6 +1033,7 @@ function runFolderAction(action) {
   const folder = folderById(id);
   $("#folderActionsDialog").close();
   if (!folder) return;
+  if (action === "note") { openFolderNoteDialog(id); return; }
   if (action === "sub") { openFolderCreateDialog(id); return; }
   if (action === "rename") { renameFolder(id); return; }
   if (action === "move") { state.folderSelection = new Set([id]); state.folderSelectMode = false; openMoveFolderDialog([id]); return; }
@@ -1042,6 +1058,30 @@ async function removeFolder(id) {
     showError("No se pudo borrar la carpeta.");
   }
 }
+// La nota de carpeta es el contexto que no cabe en el nombre y que no pertenece a
+// ninguna foto en particular: cuándo se hizo, quién estaba, qué quedó pendiente.
+function openFolderNoteDialog(id) {
+  const folder = folderById(id);
+  if (!folder) return;
+  state.actionsFolderId = id;
+  $("#folderNoteTitle").textContent = `Nota de "${folder.name}"`;
+  $("#folderNoteInput").value = folder.note || "";
+  $("#folderNoteDialog").showModal();
+  setTimeout(() => $("#folderNoteInput").focus(), 50);
+}
+$("#folderNoteCard").onclick = () => openFolderNoteDialog(state.activeFolderId);
+$("#confirmFolderNote").onclick = async () => {
+  const folder = folderById(state.actionsFolderId);
+  if (!folder) return;
+  const note = $("#folderNoteInput").value.trim();
+  const had = !!folder.note;
+  if (note) folder.note = note; else delete folder.note;
+  await saveFolders();
+  $("#folderNoteDialog").close();
+  refreshCurrentList();
+  toast(note ? "Nota guardada" : had ? "Nota borrada" : "Sin cambios");
+};
+
 async function renameFolder(id) {
   const folder = folderById(id);
   if (!folder) return;
@@ -1075,12 +1115,34 @@ $("#folderPickNew").onclick = () => { $("#folderPickDialog").close(); openFolder
 
 // --- Detalle de una foto ---
 $("#markButton").onclick = () => { if (state.activePhoto) openEditorForPhoto(state.activePhoto); };
-$("#editButton").onclick = () => {
+// Notas rápidas: en un relevamiento la misma observación se repite decenas de veces
+// ("humedad en cielorraso"). En vez de pedirle al usuario que mantenga una lista de
+// etiquetas, la app ofrece lo que él mismo ya escribió, ordenado por uso.
+function frequentNotes(limit) {
+  const counts = new Map();
+  for (const photo of state.photos) {
+    const note = (photo.note || "").trim();
+    if (!note || note.length > 60) continue;
+    counts.set(note, (counts.get(note) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([note]) => note);
+}
+function renderQuickNotes() {
+  const current = $("#editNote").value.trim();
+  const notes = frequentNotes(6).filter((note) => note !== current);
+  $("#quickNotes").hidden = notes.length === 0;
+  $("#quickNotes").innerHTML = notes.map((note) => `<button type="button" class="quick-note" data-quick-note="${esc(note)}">${esc(note)}</button>`).join("");
+}
+function openPhotoEdit(focusNote) {
   const photo = state.activePhoto; if (!photo) return;
   $("#editName").value = photo.name;
   $("#editNote").value = photo.note || "";
+  renderQuickNotes();
   $("#detailReadView").hidden = true; $("#editForm").hidden = false;
-};
+  if (focusNote) setTimeout(() => $("#editNote").focus(), 50);
+}
+$("#editButton").onclick = () => openPhotoEdit(false);
+$("#detailNote").onclick = () => openPhotoEdit(true);
 $("#editCancel").onclick = () => { $("#editForm").hidden = true; $("#detailReadView").hidden = false; };
 $("#editForm").onsubmit = async (event) => {
   event.preventDefault();
@@ -1090,7 +1152,7 @@ $("#editForm").onsubmit = async (event) => {
     photo.note = $("#editNote").value.trim();
     await idbPutPhoto(photo);
     $("#detailName").textContent = photo.name;
-    $("#detailNote").textContent = photo.note || "Sin observaciones.";
+    renderDetailNote(photo);
     $("#editForm").hidden = true; $("#detailReadView").hidden = false;
     toast("Cambios guardados");
   } catch (error) {
@@ -1156,9 +1218,10 @@ async function buildExportZip(photos) {
   await loadJSZip();
   const zip = new JSZip();
   const usedNames = new Map();
-  const rows = [["Nombre", "Carpeta", "Nota", "Fecha"]];
+  const rows = [["Nombre", "Carpeta", "Nota de la foto", "Nota de la carpeta", "Fecha"]];
   for (const photo of photos) {
     const pathNames = folderPath(photo.folderId);
+    const folderNote = folderById(photo.folderId)?.note || "";
     const dir = pathNames.map(sanitizeFileName).join("/") || "General";
     const used = usedNames.get(dir) || new Set();
     const base = sanitizeFileName(photo.name);
@@ -1168,10 +1231,19 @@ async function buildExportZip(photos) {
     while (used.has(fileName)) { fileName = `${base} (${i}).${ext}`; i++; }
     used.add(fileName); usedNames.set(dir, used);
     zip.file(`${dir}/${fileName}`, photo.blob);
-    rows.push([photo.name, pathNames.join(" / "), photo.note || "", formatDate(photo.createdAt)]);
+    rows.push([photo.name, pathNames.join(" / "), photo.note || "", folderNote, formatDate(photo.createdAt)]);
   }
   const csv = rows.map((row) => row.map(csvEscape).join(";")).join("\r\n");
   zip.file("registro.csv", "﻿" + csv);
+  // La nota de carpeta también va como archivo suelto dentro de su propia carpeta:
+  // al abrir el zip queda a la vista sin tener que ir al CSV.
+  const exported = new Set(photos.map((photo) => photo.folderId));
+  for (const folderId of exported) {
+    const folder = folderById(folderId);
+    if (!folder || !folder.note) continue;
+    const dir = folderPath(folderId).map(sanitizeFileName).join("/");
+    zip.file(`${dir}/_nota.txt`, "﻿" + folder.note);
+  }
   return zip.generateAsync({ type: "blob", compression: "STORE" });
 }
 async function shareOrDownload(blob, fileName) {

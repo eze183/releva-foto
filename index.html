@@ -61,6 +61,11 @@
           <div><p id="folderViewPath" class="eyebrow">CARPETA</p><h2 id="folderViewTitle">General</h2></div>
         </div>
 
+        <button type="button" id="folderNoteCard" class="note-card">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+          <span id="folderNoteText"></span>
+        </button>
+
         <button class="primary-button folder-capture-button" data-action="capture">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           Tomar fotos
@@ -154,10 +159,11 @@
             Datos
           </button>
         </div>
-        <div id="detailReadView" class="detail-content"><span id="detailFolder" class="folder-pill"></span><h2 id="detailName"></h2><p id="detailNote"></p><small id="detailDate"></small></div>
+        <div id="detailReadView" class="detail-content"><span id="detailFolder" class="folder-pill"></span><h2 id="detailName"></h2><button type="button" id="detailNote" class="detail-note"></button><small id="detailDate"></small></div>
         <form id="editForm" class="details-form" hidden>
           <label>Nombre<input id="editName" required /></label>
           <label>Nota<textarea id="editNote" rows="3" placeholder="Observaciones del relevamiento..."></textarea></label>
+          <div id="quickNotes" class="quick-notes" hidden></div>
           <button class="primary-button" type="submit">Guardar cambios</button>
           <button type="button" id="editCancel" class="secondary-button">Cancelar</button>
         </form>
@@ -221,10 +227,20 @@
       </form>
     </dialog>
 
+    <dialog id="folderNoteDialog">
+      <form method="dialog">
+        <h3 id="folderNoteTitle">Nota de la carpeta</h3>
+        <p class="dialog-hint">Contexto que vale para todo el conjunto: fecha, quién estaba, cómo se accede, qué falta.</p>
+        <textarea id="folderNoteInput" rows="4" placeholder="Ej. Relevamiento 10/08, presente el propietario. Falta ver el fondo."></textarea>
+        <div class="dialog-actions"><button value="cancel">Cancelar</button><button id="confirmFolderNote" type="button">Guardar</button></div>
+      </form>
+    </dialog>
+
     <dialog id="folderActionsDialog">
       <form method="dialog">
         <h3 id="folderActionsTitle">Carpeta</h3>
         <ul class="action-sheet">
+          <li><button type="button" data-folder-action="note">Nota de la carpeta</button></li>
           <li><button type="button" data-folder-action="rename">Renombrar</button></li>
           <li><button type="button" data-folder-action="sub">Crear subcarpeta</button></li>
           <li><button type="button" data-folder-action="move">Mover a...</button></li>

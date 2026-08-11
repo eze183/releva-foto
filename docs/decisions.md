@@ -491,3 +491,49 @@ decidir por su cuenta.
 alguna vez se agrega una (una papelera, una carpeta de sistema), tiene que justificar
 por qué el usuario no puede tocarla — la lección de esta decisión es que una excepción
 permanente en la UI se paga en cada uso.
+
+---
+
+## 20. Notas: texto libre en dos niveles (carpeta y foto), no campos estructurados
+
+**Decisión**: hay dos notas, ambas de **texto libre**:
+- **Nota de carpeta** (`folder.note`): el contexto que vale para todo el conjunto y no
+  pertenece a ninguna foto — cuándo se hizo, quién estaba, cómo se accede, qué quedó
+  pendiente. Se ve como un bloque fijo arriba de la vista de carpeta y como una línea
+  en la tarjeta de la carpeta. Se edita tocando el bloque o desde el menú ⋮.
+- **Nota de foto** (`photo.note`, ya existía): la observación puntual de esa foto.
+
+Se descartaron los campos estructurados (patología / severidad / ambiente) y las
+etiquetas con lista predefinida.
+
+**Por qué**: el usuario delegó explícitamente el formato ("no sé el formato de las
+mismas, eso te lo dejo a vos"). Un relevamiento no tiene un esquema conocido de
+antemano — cada obra trae observaciones que no estaban en la lista, y un formulario
+fijo obliga a elegir "otro" y escribir igual, con un paso extra. El texto libre no
+pierde nada: la búsqueda ya indexa nota de foto y de carpeta, y el CSV exportado las
+lleva como columnas propias, así que filtrar y ordenar se hace afuera, en la planilla,
+donde el usuario ya tiene todas las herramientas.
+
+**El problema real no era el formato, era el acceso y la visibilidad**, y ahí se
+concentró el trabajo:
+- **Indicador en la grilla**: las fotos con nota muestran una marca sobre la miniatura
+  y la nota como subtítulo. Una nota que hay que abrir para saber que existe no sirve
+  cuando estás barriendo 40 fotos.
+- **Notas rápidas** (`frequentNotes()`): al editar la nota de una foto aparecen chips
+  con las notas que el propio usuario ya escribió, ordenadas por frecuencia de uso.
+  En un relevamiento la misma observación se repite decenas de veces ("humedad en
+  cielorraso") y tipearla cada vez en un teclado de teléfono es el verdadero costo.
+  Es el beneficio de las etiquetas sin el costo de mantener una lista: la lista se
+  construye sola con el uso y no hay ninguna pantalla de administración.
+- **Un toque para editar**: la nota en la vista de detalle es el propio botón que abre
+  la edición, con el foco puesto en el campo. Cuando está vacía dice "Agregar una
+  nota" en color de acento, así el lugar vacío invita en vez de quedar mudo.
+
+**Exportación**: la nota de carpeta va como columna en `registro.csv` **y** como
+`_nota.txt` dentro de su carpeta en el zip — al descomprimir queda a la vista sin
+tener que abrir la planilla.
+
+**Implicación para el futuro**: si alguna vez se pide filtrar o agrupar por tipo de
+patología dentro de la app, el camino es derivar las categorías de las notas rápidas
+que ya se usan (son, de hecho, etiquetas emergentes), no agregar un campo nuevo que
+obligue a reclasificar todo lo ya cargado.

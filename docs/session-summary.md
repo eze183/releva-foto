@@ -389,3 +389,44 @@ cancelar no tocó nada y confirmar dejó la base en cero. En la migración, "Gen
 sobrevive como carpeta común con sus fotos y ya se puede borrar; una foto sembrada
 apuntando a una carpeta inexistente terminó en "Fotos sueltas" en vez de desaparecer.
 Sin errores de consola.
+
+---
+
+## Sesión 9 — Notas de carpeta y notas rápidas (10/08/2026)
+
+**Disparador**: el usuario confirmó que la versión anterior funciona bien y pidió
+"poder agregar la opción de añadirle notas a determinadas fotos o carpetas", dejando
+el formato a criterio del desarrollador.
+
+**Diagnóstico previo**: las fotos **ya tenían** nota (`photo.note`, editable desde el
+botón "Datos"), pero estaba escondida detrás de un formulario y no había forma de
+saber desde la grilla cuál foto tenía algo escrito. Las carpetas no tenían nada. O
+sea: el pedido era mitad funcionalidad nueva (carpetas) y mitad problema de acceso y
+visibilidad (fotos).
+
+**Se hizo**:
+- **Nota de carpeta** (`folder.note`): bloque fijo arriba de la vista de carpeta —
+  con estado vacío que invita ("Agregar una nota a esta carpeta") — y una línea en la
+  tarjeta de la carpeta. Se edita tocando el bloque o desde el menú ⋮ → "Nota de la
+  carpeta". Vaciar el campo borra la nota.
+- **Visibilidad de la nota de foto**: marca sobre la miniatura y la nota como
+  subtítulo de la tarjeta en la grilla.
+- **Un toque para editar**: la nota en el detalle es el botón que abre la edición con
+  el foco puesto en el campo.
+- **Notas rápidas** (`frequentNotes()`): chips con las notas ya usadas, ordenadas por
+  frecuencia (máx. 6, se excluye la que ya está en el campo y las de más de 60
+  caracteres). Etiquetas emergentes sin pantalla de administración.
+- **Búsqueda y exportación**: el buscador indexa la nota de carpeta; el CSV pasó a
+  tener columnas separadas "Nota de la foto" y "Nota de la carpeta", y la nota de
+  carpeta también se escribe como `_nota.txt` dentro de su carpeta en el zip.
+- **Bug visual corregido en el camino**: al agregar el subtítulo de nota, las tarjetas
+  de foto quedaron con alturas distintas y a las que no tenían nota les aparecía una
+  franja gris arriba — los `<button>` centran su contenido verticalmente. Se resolvió
+  con `display:flex;flex-direction:column` en `.photo-card`.
+- Bump de `sw.js` a v23.
+
+**Resultado**: verificado en el Browser pane con datos sembrados. La nota de carpeta
+se crea, edita y borra desde las dos vías; los chips de notas rápidas aparecen
+ordenados y excluyen la nota actual; buscar "propietario" encuentra la carpeta por su
+nota y "cielorraso" encuentra las 3 fotos; el zip sale con `_nota.txt` en cada carpeta
+que tiene nota y el CSV con las dos columnas. Sin errores de consola.
