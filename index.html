@@ -201,9 +201,14 @@
       </div>
       <div id="cameraStrip" class="camera-strip" hidden></div>
       <div class="camera-controls">
-        <button id="cameraFlip" class="camera-side" aria-label="Cambiar cámara">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        </button>
+        <div class="camera-controls-side">
+          <button id="cameraLens" class="camera-side" aria-label="Elegir lente" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+          </button>
+          <button id="cameraFlip" class="camera-side" aria-label="Cambiar cámara">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
         <button id="cameraShutter" class="camera-shutter" aria-label="Tomar foto"></button>
         <button id="cameraDone" class="camera-done">Listo</button>
       </div>
@@ -246,6 +251,14 @@
           <li><button type="button" data-folder-action="move">Mover a...</button></li>
           <li><button type="button" data-folder-action="delete" class="danger">Eliminar</button></li>
         </ul>
+        <div class="dialog-actions"><button value="cancel">Cancelar</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="lensDialog">
+      <form method="dialog">
+        <h3>Lente trasero</h3>
+        <ul id="lensList" class="action-sheet"></ul>
         <div class="dialog-actions"><button value="cancel">Cancelar</button></div>
       </form>
     </dialog>

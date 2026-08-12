@@ -1,9 +1,11 @@
+const LENS_STORAGE_KEY = "releva-foto-lens-device";
 const state = {
   photos: [], folders: [], activeFolderId: null, search: "",
   activePhoto: null, editorPhoto: null,
   tool: null, color: "#ec3013", annotations: [], selectedAnnotationId: null, drawing: false,
   cameraStream: null, facingMode: "environment", cameraZoom: 1, capturing: false,
   captureFolderId: null, burst: [],
+  rearDeviceId: localStorage.getItem(LENS_STORAGE_KEY) || null, rearCameras: [],
   folderSelection: new Set(), folderSelectMode: false,
   photoSelection: new Set(), photoSelectMode: false, photoMoveMode: null,
   pendingParentId: null, actionsFolderId: null, afterFolderPick: null,
@@ -279,16 +281,72 @@ async function openCameraFor(folderId) {
   $("#cameraFolderName").textContent = folder.name;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("#cameraInput").click(); return; }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: state.facingMode, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
+    const stream = await requestCameraStream();
     state.cameraStream = stream;
     state.cameraZoom = 1;
     $("#cameraStream").srcObject = stream;
     $("#cameraOverlay").hidden = false;
     setupCameraZoom(stream);
+    await refreshLensPicker();
   } catch (error) {
     console.error(error);
     $("#cameraInput").click();
   }
+}
+// El teléfono expone cada lente físico (normal, gran angular, teleobjetivo) como una
+// cámara separada — no hay un control estándar de "zoom óptico" ni forma de pedir
+// "el gran angular" por constraint. El deviceId elegido se guarda para la próxima vez;
+// si ese lente ya no existe (se cambió de teléfono, o el navegador reordenó los ids),
+// se cae de nuevo a facingMode sin romper la apertura de cámara.
+async function requestCameraStream() {
+  const base = { width: { ideal: 2560 }, height: { ideal: 1440 } };
+  if (state.facingMode === "environment" && state.rearDeviceId) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video: { ...base, deviceId: { exact: state.rearDeviceId } }, audio: false });
+    } catch (error) {
+      console.warn("No se pudo abrir el lente guardado, se usa el trasero por defecto.", error);
+      state.rearDeviceId = null;
+      localStorage.removeItem(LENS_STORAGE_KEY);
+    }
+  }
+  return navigator.mediaDevices.getUserMedia({ video: { ...base, facingMode: state.facingMode }, audio: false });
+}
+// El botón de lente sólo aparece si el teléfono distingue sus cámaras traseras por
+// etiqueta ("... facing back"). Sin esa distinción no hay forma confiable de separar
+// gran angular de la cámara principal — mostrar un selector con nombres genéricos
+// haría más daño que bien, así que en ese caso se prefiere no ofrecerlo.
+async function refreshLensPicker() {
+  const button = $("#cameraLens");
+  if (state.facingMode !== "environment" || !navigator.mediaDevices.enumerateDevices) { button.hidden = true; return; }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const rear = devices.filter((d) => d.kind === "videoinput" && /back|rear|trasera/i.test(d.label) && !/front|user|frontal|selfie/i.test(d.label));
+    state.rearCameras = rear;
+    button.hidden = rear.length < 2;
+  } catch (error) {
+    console.error(error);
+    state.rearCameras = [];
+    button.hidden = true;
+  }
+}
+function openLensPicker() {
+  if (state.rearCameras.length < 2) return;
+  $("#lensList").innerHTML = state.rearCameras
+    .map((cam, i) => `<li><button type="button" data-lens="${esc(cam.deviceId)}"${cam.deviceId === state.rearDeviceId ? ' class="active"' : ""}>${esc(cam.label || `Lente ${i + 1}`)}</button></li>`)
+    .join("");
+  $("#lensDialog").showModal();
+}
+async function selectLens(deviceId) {
+  $("#lensDialog").close();
+  if (deviceId === state.rearDeviceId) return;
+  state.rearDeviceId = deviceId;
+  localStorage.setItem(LENS_STORAGE_KEY, deviceId);
+  const folderId = state.captureFolderId;
+  const burst = state.burst;
+  closeCamera();
+  await openCameraFor(folderId);
+  state.burst = burst;
+  renderBurst();
 }
 function requestCapture() {
   if (state.activeFolderId) { openCameraFor(state.activeFolderId); return; }
@@ -833,6 +891,8 @@ document.addEventListener("click", (event) => {
   if (pickTarget) resolveFolderPick(pickTarget.dataset.pickFolder);
   const quickNote = event.target.closest("[data-quick-note]");
   if (quickNote) { $("#editNote").value = quickNote.dataset.quickNote; renderQuickNotes(); }
+  const lensTarget = event.target.closest("[data-lens]");
+  if (lensTarget) selectLens(lensTarget.dataset.lens);
 });
 
 let longPressTimer = null;
@@ -1179,6 +1239,7 @@ $("#cameraShutter").onclick = capturePhoto;
 $("#cameraCancel").onclick = finishCamera;
 $("#cameraDone").onclick = finishCamera;
 $("#cameraFlip").onclick = flipCamera;
+$("#cameraLens").onclick = openLensPicker;
 $("#importButton").onclick = () => $("#libraryInput").click();
 // Fallback: si getUserMedia no está disponible se abre la cámara nativa, y ahí la
 // carpeta destino es la que se eligió al pedir la cámara, no la que esté abierta.

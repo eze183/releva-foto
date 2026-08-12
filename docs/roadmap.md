@@ -69,6 +69,13 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       dispositivo lo soporta (`MediaStreamTrack.applyConstraints`), con fallback a
       zoom digital (`transform:scale()` sobre el video) cuando no. El zoom digital
       **se refleja en la foto guardada** (el frame se recorta al capturar).
+- [x] **Selector de lente trasero** (gran angular / normal / teleobjetivo): aparece
+      sólo si el teléfono expone sus cámaras traseras con etiquetas distinguibles
+      (`enumerateDevices()`). La elección se recuerda entre sesiones y si el lente
+      guardado deja de existir, cae de nuevo al comportamiento por defecto sin
+      romper la apertura de la cámara. **Falta confirmar en un teléfono real** si
+      Chrome expone las etiquetas con claridad suficiente (no se pudo probar contra
+      hardware desde este entorno, sólo con cámaras mockeadas).
 - [x] Zoom táctil en la foto ya tomada (vista de detalle): pellizco para ampliar,
       arrastre de un dedo para paneo, doble tap para alternar 1x/2.5x. Implementado a
       mano porque el pinch-zoom nativo de la página queda deshabilitado al correr la

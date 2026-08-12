@@ -430,3 +430,42 @@ se crea, edita y borra desde las dos vías; los chips de notas rápidas aparecen
 ordenados y excluyen la nota actual; buscar "propietario" encuentra la carpeta por su
 nota y "cielorraso" encuentra las 3 fotos; el zip sale con `_nota.txt` en cada carpeta
 que tiene nota y el CSV con las dos columnas. Sin errores de consola.
+
+---
+
+## Sesión 10 — Selector de lente trasero (gran angular) (10/08/2026)
+
+**Disparador**: el usuario preguntó si se puede configurar la cámara para usar el
+lente gran angular.
+
+**Investigación previa**: la Web API no tiene control de zoom óptico ni una forma
+directa de pedir "el gran angular" — cada lente físico se expone como una cámara
+separada en `enumerateDevices()`, distinguible sólo por su `label`, que no todos los
+teléfonos completan de forma útil. Se explicó la limitación al usuario antes de
+implementar y se preguntó si igual quería avanzar sabiendo que haría falta confirmarlo
+en su teléfono; contestó que sí.
+
+**Se hizo**:
+- `requestCameraStream()`: si hay un lente trasero guardado (`localStorage`), lo pide
+  por `deviceId` exacto; si ya no existe, cae de nuevo a `facingMode` sin romper la
+  apertura.
+- `refreshLensPicker()`: tras abrir la cámara, lista las traseras con
+  `enumerateDevices()` filtrando por etiqueta (`/back|rear|trasera/i`, excluyendo
+  frontales). El botón de lente (ícono de círculos concéntricos, junto al de cambiar
+  cámara) sólo se muestra si hay **dos o más** distinguibles por nombre — con
+  etiquetas genéricas, no aparece, para no ofrecer un selector inútil.
+- `selectLens()`: cierra y reabre la cámara con el lente elegido, conservando la
+  ráfaga en curso; guarda la elección para la próxima vez.
+- CSS: `.camera-controls` pasó de flex a grid (`1fr auto 1fr`) para que el disparador
+  quede siempre centrado sin importar si el grupo izquierdo tiene uno o dos botones.
+- Bump de `sw.js` a v24.
+
+**Resultado**: verificado en el Browser pane con `enumerateDevices`/`getUserMedia`
+mockeados (dos cámaras traseras etiquetadas "facing back" + una frontal). El botón
+aparece sólo con etiquetas distinguibles, el diálogo marca la opción activa, elegir
+el gran angular reabre la cámara con ese `deviceId` y lo recuerda en la sesión
+siguiente, y si el `deviceId` guardado falla (`OverconstrainedError` simulado) la app
+cae de nuevo a `facingMode` sin trabarse. Con etiquetas vacías (el caso más común) el
+botón se mantiene oculto y la cámara funciona exactamente como antes. Sin errores de
+consola. **Pendiente**: no se pudo probar contra hardware real — falta que el usuario
+confirme en su teléfono si aparece el selector y si distingue bien los lentes.

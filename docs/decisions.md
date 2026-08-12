@@ -537,3 +537,40 @@ tener que abrir la planilla.
 patología dentro de la app, el camino es derivar las categorías de las notas rápidas
 que ya se usan (son, de hecho, etiquetas emergentes), no agregar un campo nuevo que
 obligue a reclasificar todo lo ya cargado.
+
+---
+
+## 21. Selector de lente trasero: sólo aparece si el teléfono distingue sus cámaras
+     por etiqueta
+
+**Decisión**: `openCameraFor()` intenta abrir la cámara con el `deviceId` guardado en
+`localStorage` (`releva-foto-lens-device`) cuando existe; si ese dispositivo ya no es
+válido, cae de nuevo a `facingMode` sin romper la apertura. Después de abrir, se
+listan las cámaras con `enumerateDevices()` y se filtran las que tienen etiqueta de
+cámara trasera (`/back|rear|trasera/i`, excluyendo `/front|user|frontal|selfie/i`). El
+botón de lente (grupo de controles, a la izquierda del flip) sólo aparece si hay **dos
+o más** cámaras traseras distinguibles por nombre; si no, se oculta y la cámara se
+comporta exactamente igual que antes.
+
+**Por qué**: el usuario preguntó por usar el gran angular. La Web API no tiene un
+control de "zoom óptico" ni una forma de pedir "el lente gran angular" por constraint
+— cada lente físico (normal, ultra angular, teleobjetivo) se expone como una cámara
+separada en `enumerateDevices()`, y la única pista de cuál es cuál es el `label`, que
+en Android Chrome suele incluir "facing back"/"facing front" pero **no está
+garantizado** — algunos teléfonos devuelven etiquetas genéricas ("Camera 0",
+"Camera 1") sin distinguir. Mostrar un selector con nombres genéricos sería peor que
+no mostrarlo: el usuario no tendría forma de saber cuál es cuál, y probaría a ciegas.
+Por eso el selector se autolimita a aparecer sólo cuando el propio teléfono da una
+pista utilizable.
+
+**Trade-off aceptado**: en teléfonos con etiquetas genéricas, no hay forma de elegir
+lente desde la app aunque el hardware lo soporte. No hay alternativa mejor sin acceso
+a APIs nativas (fuera del alcance de una PWA).
+
+**Verificación pendiente del usuario**: esto se probó con cámaras mockeadas en el
+Browser pane (no hay forma de verificar contra hardware real desde este entorno). Hay
+que confirmar en el teléfono si Chrome expone las etiquetas de sus lentes traseros con
+suficiente claridad como para que el selector aparezca y sea útil.
+
+**Dónde vive**: `app.js` — `requestCameraStream()`, `refreshLensPicker()`,
+`openLensPicker()`, `selectLens()`; botón `#cameraLens`, diálogo `#lensDialog`.
