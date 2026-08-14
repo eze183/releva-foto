@@ -507,14 +507,33 @@ function openDetail(id) {
 // --- Zoom con pellizco sobre la foto en detalle: el navegador desactiva el
 // pinch-zoom nativo de la página cuando la app corre instalada como PWA (modo
 // standalone), así que hay que implementarlo a mano con transform CSS. ---
-const photoZoom = { scale: 1, x: 0, y: 0 };
+const photoZoom = { scale: 1, x: 0, y: 0, contentW: 0, contentH: 0, offX: 0, offY: 0 };
+// La foto se muestra con object-fit:contain (se ve completa, no recortada), lo que
+// suele dejar franjas vacías a los costados o arriba/abajo si su relación de aspecto
+// no coincide con la del recuadro. El pellizco escala el <img> entero (franjas
+// incluidas) desde su esquina superior izquierda, así que hay que calcular dónde
+// caen los bordes reales de la foto dentro de ese recuadro para no dejar panear
+// hacia la franja vacía en vez de hacia el resto de la imagen.
+function computePhotoContentBox() {
+  const img = $("#detailImage");
+  const rect = $("#detailImageWrap").getBoundingClientRect();
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  if (!iw || !ih || !rect.width || !rect.height) { photoZoom.contentW = rect.width; photoZoom.contentH = rect.height; photoZoom.offX = 0; photoZoom.offY = 0; return; }
+  if (iw / ih > rect.width / rect.height) { photoZoom.contentW = rect.width; photoZoom.contentH = rect.width * ih / iw; }
+  else { photoZoom.contentH = rect.height; photoZoom.contentW = rect.height * iw / ih; }
+  photoZoom.offX = (rect.width - photoZoom.contentW) / 2;
+  photoZoom.offY = (rect.height - photoZoom.contentH) / 2;
+}
 function applyPhotoZoom() { $("#detailImage").style.transform = `translate(${photoZoom.x}px, ${photoZoom.y}px) scale(${photoZoom.scale})`; }
 function resetPhotoZoom() { photoZoom.scale = 1; photoZoom.x = 0; photoZoom.y = 0; applyPhotoZoom(); }
+function clampAxis(size, offset, scale, containerSize, current) {
+  const scaledSize = size * scale, scaledOffset = offset * scale;
+  if (scaledSize <= containerSize) return (containerSize - scaledSize) / 2 - scaledOffset;
+  return Math.min(-scaledOffset, Math.max(containerSize - scaledSize - scaledOffset, current));
+}
 function clampPhotoZoom(wrapRect) {
-  const minX = wrapRect.width - wrapRect.width * photoZoom.scale;
-  const minY = wrapRect.height - wrapRect.height * photoZoom.scale;
-  photoZoom.x = Math.min(0, Math.max(minX, photoZoom.x));
-  photoZoom.y = Math.min(0, Math.max(minY, photoZoom.y));
+  photoZoom.x = clampAxis(photoZoom.contentW, photoZoom.offX, photoZoom.scale, wrapRect.width, photoZoom.x);
+  photoZoom.y = clampAxis(photoZoom.contentH, photoZoom.offY, photoZoom.scale, wrapRect.height, photoZoom.y);
 }
 (function setupPhotoZoom() {
   const wrap = $("#detailImageWrap");
@@ -523,6 +542,7 @@ function clampPhotoZoom(wrapRect) {
   let lastTapTime = 0;
   wrap.addEventListener("touchstart", (e) => {
     const rect = wrap.getBoundingClientRect();
+    computePhotoContentBox();
     if (e.touches.length === 2) {
       e.preventDefault();
       pinchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);

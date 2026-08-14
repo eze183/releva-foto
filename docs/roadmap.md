@@ -76,10 +76,14 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       romper la apertura de la cámara. **Falta confirmar en un teléfono real** si
       Chrome expone las etiquetas con claridad suficiente (no se pudo probar contra
       hardware desde este entorno, sólo con cámaras mockeadas).
-- [x] Zoom táctil en la foto ya tomada (vista de detalle): pellizco para ampliar,
-      arrastre de un dedo para paneo, doble tap para alternar 1x/2.5x. Implementado a
-      mano porque el pinch-zoom nativo de la página queda deshabilitado al correr la
-      app instalada como PWA (ver `docs/decisions.md`).
+- [x] La foto en la vista de detalle **se ve completa** (`object-fit:contain`), no
+      recortada para llenar el recuadro. Zoom táctil: pellizco para ampliar, arrastre
+      de un dedo para paneo, doble tap para alternar 1x/2.5x — el clamp de paneo
+      calcula los bordes reales de la foto dentro del recuadro (que puede tener
+      franjas vacías si la relación de aspecto no coincide) para no dejar panear
+      hacia el vacío. Implementado a mano porque el pinch-zoom nativo de la página
+      queda deshabilitado al correr la app instalada como PWA (ver
+      `docs/decisions.md`).
 - [x] Selección múltiple de fotos dentro de una carpeta (mantener presionada una):
       mover, copiar o eliminar varias a la vez.
 - [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) con selección de qué carpetas

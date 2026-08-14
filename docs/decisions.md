@@ -574,3 +574,44 @@ suficiente claridad como para que el selector aparezca y sea útil.
 
 **Dónde vive**: `app.js` — `requestCameraStream()`, `refreshLensPicker()`,
 `openLensPicker()`, `selectLens()`; botón `#cameraLens`, diálogo `#lensDialog`.
+
+---
+
+## 22. La foto en la vista de detalle se ve completa (`contain`), no recortada
+     (`cover`)
+
+**Decisión**: `.detail-image` pasa de `object-fit:cover` a `object-fit:contain`. El
+recuadro (`.detail-image-wrap`) crece de 38vh a 48vh para aprovechar mejor el espacio
+ahora que puede quedar con franjas vacías a los costados o arriba/abajo (rellenas con
+`--surface`, el mismo fondo del recuadro).
+
+**Por qué**: el usuario reportó que al abrir una foto guardada la veía "a un 80%
+aprox". La causa era `cover`: recorta la imagen para llenar el recuadro por completo,
+así que cualquier foto cuya relación de aspecto no coincidiera exactamente con la del
+recuadro perdía una porción — permanentemente, sin forma de verla completa salvo que
+la relación de aspecto calzara por casualidad. El pellizco para zoom (decisión #9)
+sólo amplía, nunca reduce por debajo de 1x, así que no había ninguna vía para
+recuperar el contenido recortado.
+
+**Complejidad aceptada — el pellizco necesitó recalcularse**: con `cover`, la imagen
+rellena el 100% del recuadro sin excepción, así que el pellizco/paneo podía asumir que
+el `<img>` y el recuadro eran geométricamente lo mismo. Con `contain` eso deja de ser
+cierto: el contenido real de la foto ocupa un sub-rectángulo del `<img>` (el resto son
+franjas transparentes por el centrado que aplica `object-fit`). Como la transformación
+CSS (`scale`+`translate`) sigue actuando sobre el `<img>` entero —franjas incluidas—
+`clampPhotoZoom()` necesitaba saber dónde caen los bordes *reales* de la foto para no
+dejar panear indefinidamente hacia una franja vacía. Se agregó
+`computePhotoContentBox()`, que calcula ese sub-rectángulo (ancho, alto y desplazamiento
+respecto al recuadro) a partir de `naturalWidth`/`naturalHeight` de la imagen ya
+cargada, y se recalcula en cada gesto (`touchstart`) para no depender de que el
+`onload` de la imagen ya haya disparado en el momento exacto en que el usuario empieza
+a pellizcar.
+
+**Verificado con dos casos extremos** (foto panorámica 1600×500 y foto vertical
+500×1600) en el Browser pane: la foto se ve completa por defecto en ambos casos, con
+franjas en el eje correspondiente; el pellizco a la escala máxima (4x) cubre
+correctamente el recuadro sin dejar panear hacia la franja vacía en ninguno de los dos
+ejes.
+
+**Dónde vive**: `styles.css` — `.detail-image-wrap`, `.detail-image`. `app.js` —
+`computePhotoContentBox()`, `clampAxis()`, `clampPhotoZoom()`.

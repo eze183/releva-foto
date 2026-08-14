@@ -469,3 +469,31 @@ cae de nuevo a `facingMode` sin trabarse. Con etiquetas vacías (el caso más co
 botón se mantiene oculto y la cámara funciona exactamente como antes. Sin errores de
 consola. **Pendiente**: no se pudo probar contra hardware real — falta que el usuario
 confirme en su teléfono si aparece el selector y si distingue bien los lentes.
+
+---
+
+## Sesión 11 — La foto en detalle se ve completa, no recortada (10/08/2026)
+
+**Disparador**: el usuario reportó que al ver una foto guardada la mostraba "a un 80%
+aprox".
+
+**Causa**: `.detail-image` usaba `object-fit:cover`, que recorta la imagen para
+llenar el recuadro por completo. Cualquier foto cuya relación de aspecto no coincidiera
+con la del recuadro perdía una porción de forma permanente, y como el pellizco sólo
+amplía (nunca reduce por debajo de 1x), no había manera de recuperar lo recortado.
+
+**Se hizo**:
+- `object-fit:contain` en vez de `cover`; el recuadro creció de 38vh a 48vh.
+- El pellizco/paneo se recalculó: con `contain` la foto real ocupa un sub-rectángulo
+  del `<img>` (pueden quedar franjas vacías centradas), y la transformación CSS sigue
+  actuando sobre el elemento entero. `computePhotoContentBox()` calcula ese
+  sub-rectángulo a partir de `naturalWidth`/`naturalHeight`, y `clampPhotoZoom()` usa
+  esos bordes reales (no los del recuadro) para no dejar panear hacia una franja
+  vacía.
+- Bump de `sw.js` a v25.
+
+**Resultado**: verificado en el Browser pane con dos fotos de aspecto extremo
+(panorámica 1600×500 y vertical 500×1600) — ambas se ven completas por defecto, con
+franjas en el eje correspondiente. El clamp de paneo a escala máxima (4x) se probó
+matemáticamente en los dos ejes y en ambos sentidos (arriba/abajo, izquierda/derecha):
+cubre el recuadro sin pasarse hacia el vacío. Sin errores de consola.

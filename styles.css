@@ -114,8 +114,11 @@ dialog textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0}
 .action-sheet button.active{border-color:var(--accent);color:var(--accent-700)}
 .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink-900);color:#fff;font-size:.8rem;font-weight:700;padding:11px 18px;z-index:90;max-width:min(90vw,420px);text-align:center}
 .toast[hidden]{display:none}
-.detail-image-wrap{width:100%;height:38vh;overflow:hidden;background:var(--surface);border-bottom:2px solid var(--line);touch-action:none}
-.detail-image{width:100%;height:100%;object-fit:cover;display:block;transform-origin:0 0}
+.detail-image-wrap{width:100%;height:48vh;overflow:hidden;background:var(--surface);border-bottom:2px solid var(--line);touch-action:none}
+/* contain, no cover: la foto tiene que verse completa por defecto, no recortada
+   para llenar el recuadro. El espacio sobrante (si la relación de aspecto de la
+   foto no coincide con la del recuadro) queda con el fondo de --surface. */
+.detail-image{width:100%;height:100%;object-fit:contain;display:block;transform-origin:0 0}
 .detail-content{padding:18px 4px}
 .detail-content h2{font-size:1.3rem;margin:12px 0 8px}
 .detail-content p{line-height:1.55;color:color-mix(in srgb, var(--ink) 80%, transparent)}
