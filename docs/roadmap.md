@@ -76,6 +76,13 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       romper la apertura de la cámara. **Falta confirmar en un teléfono real** si
       Chrome expone las etiquetas con claridad suficiente (no se pudo probar contra
       hardware desde este entorno, sólo con cámaras mockeadas).
+- [x] **El botón/gesto "Atrás" de Android navega dentro de la app, no la cierra**:
+      visor de foto, cámara, editor de marcado, subcarpetas y todos los diálogos
+      dejan una entrada propia en el historial (`pushState`/`popstate`), así que el
+      atrás del sistema retrocede un paso adentro de la app en vez de salir. No
+      cubre el modo de selección múltiple (mantener presionada una carpeta/foto).
+      Verificado disparando los mismos eventos `popstate` que usa la plataforma;
+      falta confirmar con el gesto/botón físico en un teléfono real.
 - [x] **Visor de foto a pantalla completa**, como la galería nativa de Android: tocar
       una foto la abre ocupando el 100% del viewport, fondo negro, controles en
       barras flotantes con degradé arriba (volver, eliminar) y abajo

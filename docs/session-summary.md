@@ -530,3 +530,52 @@ de edición con foco en el campo correcto, guardar cierra el diálogo y actualiz
 nombre en la barra inferior; "Marcar" sigue abriendo el editor con la foto a
 resolución completa; "Volver" cierra la vista y regresa a la carpeta. Sin errores de
 consola.
+
+---
+
+## Sesión 13 — El botón atrás de Android navega dentro de la app (10/08/2026)
+
+**Disparador**: el usuario reportó que, viendo una foto, tocar la flecha de
+retroceso de Android (gesto/botón del sistema) lo sacaba de la app entera en vez de
+volver a la carpeta — "por instinto o costumbre... toco la flecha... y me saca de la
+app".
+
+**Causa**: la app nunca usaba la History API. Ninguna de sus pantallas internas
+(visor de foto, cámara, editor, subcarpetas, diálogos) dejaba rastro en el historial
+del navegador, así que el atrás de Android (que a nivel de sistema es
+`history.back()`) no tenía nada que deshacer y cerraba la PWA.
+
+**Se hizo**: sistema general con `pushState`/`popstate` — cada pantalla "hacia
+adentro" empuja una entrada; un único listener de `popstate` cierra lo que
+corresponda (`closeTopLayer()`, que inspecciona el DOM en el momento: diálogo
+abierto, cámara visible, vista activa). Los botones propios de la app (X, Cancelar,
+subir de carpeta) se redirigieron a la misma función (`requestBack()`) en vez de
+cerrar directo, para que el gesto del sistema y el botón propio produzcan siempre el
+mismo resultado sin duplicar lógica.
+
+**Bug real encontrado y corregido en el camino**: los `<dialog>` nativos se cierran
+solos (botón "Cancelar", Escape) sin pasar por JS propio — se detectan con un
+`MutationObserver` genérico sobre el atributo `open`. La primera versión hacía que
+ese observer, al detectar el cierre, llamara a `requestBack()` — pero eso disparaba
+`closeTopLayer()` de nuevo, que ya no encontraba el diálogo y cerraba **la capa de
+abajo por error** (la cámara o la carpeta, sin que el usuario lo pidiera). Se
+encontró probando explícitamente "cerrar con el Cancelar nativo, ver qué pasa
+después" en el Browser pane. Se corrigió con dos flags separados según quién inició
+el cierre.
+
+**Alcance explícito**: cubre visor de foto (el caso reportado), cámara, editor de
+marcado, subcarpetas y los ~9 diálogos. No cubre el modo de selección múltiple —
+tiene varias vías de salida no ligadas a un botón único, se dejó para otra sesión.
+
+**Resultado**: verificado en el Browser pane simulando el botón atrás con
+`history.back()` (dispara el mismo evento que usa la plataforma en una PWA
+instalada): dos niveles de subcarpeta → dos "atrás" → sube de a un nivel; foto
+abierta dos carpetas adentro → un "atrás" → vuelve a la carpeta (el caso exacto que
+reportó el usuario); cámara → cambiar de lente no suma profundidad → "atrás" cierra
+la cámara; editor → "atrás" vuelve al detalle → otro "atrás" vuelve a la carpeta;
+diálogo cerrado con Cancelar nativo vs. con el gesto del sistema → ambos caminos
+sincronizan igual, sin cierres de más; "Registros" desde tres niveles de profundidad
+→ un único evento `popstate`, sin historial fantasma (confirmado: un "atrás"
+adicional en el home ya sale de la app, correcto en la pantalla raíz). Sin errores de
+consola. Bump de `sw.js` a v27. **Pendiente**: confirmar en un teléfono real con el
+gesto/botón físico de Android, no simulable desde este entorno.

@@ -664,3 +664,92 @@ automáticamente empezaron a operar sobre el viewport completo en vez del recuad
 `styles.css` — bloque `#detailView.active`, `.detail-topbar`, `.detail-bottombar`,
 `.detail-pill-btn`. `app.js` — `openDetail()`, `openPhotoEdit()`, handlers de
 `#editButton`/`#detailNote`/`#editCancel`/`#editForm`.
+
+---
+
+## 24. El botón/gesto "Atrás" de Android navega dentro de la app, no la cierra
+
+**Decisión**: se implementó un sistema general con la History API (`pushState`/
+`popstate`) para que cualquier pantalla "superpuesta" (visor de foto, cámara, editor
+de marcado, un diálogo, una subcarpeta) deje una entrada en el historial del
+navegador. Un único listener de `popstate` cierra lo que corresponda según qué esté
+abierto en ese momento — sin importar si el gesto vino del sistema (Android) o de un
+botón propio de la app (la X, "Cancelar", subir de carpeta), porque **todos** esos
+botones pasan por la misma función (`requestBack()`) en vez de cerrar directo.
+
+**Por qué**: el usuario reportó que, al ver una foto, tocar la flecha de retroceso de
+Android (en su teléfono aparece abajo a la derecha) lo sacaba de la app entera en vez
+de volver a la carpeta — "toco la flecha... por instinto o costumbre... y me saca de
+la app, lo cual es molesto". La causa raíz: la app nunca usaba la History API, así
+que ninguna de sus pantallas internas dejaba rastro en el historial del navegador. El
+botón/gesto atrás de Android simplemente hace `history.back()` a nivel de sistema —
+sin ninguna entrada propia que consumir, no tiene nada para deshacer y cierra la PWA.
+
+**Alcance cubierto**: visor de foto (el caso reportado), cámara, editor de marcado,
+navegación entre subcarpetas, y los ~9 `<dialog>` de la app. **No cubre** el modo de
+selección múltiple (mantener presionada una carpeta/foto) — tiene varias vías de
+salida no ligadas a un botón único (deseleccionar el último ítem, mover/eliminar en
+lote) que hubiesen requerido auditar cada una por separado; queda para una sesión
+aparte si se pide.
+
+**Cómo se resolvió sin duplicar cierres** (el problema real de esta implementación):
+cada pantalla puede cerrarse por dos vías — el gesto del sistema o un botón propio —
+y ambas tienen que producir el mismo resultado exactamente una vez, no dos. La regla
+adoptada: **el cierre real vive en un solo lugar** (`closeTopLayer()`, que inspecciona
+el DOM en el momento — qué diálogo está abierto, si la cámara está visible, qué vista
+está activa — y ejecuta la acción de cierre correspondiente). Los botones propios ya
+no cierran nada directamente: llaman a `requestBack()`, que hace `history.back()` y
+deja que el `popstate` resultante dispare `closeTopLayer()`. Así, gesto del sistema y
+botón propio terminan en el mismo camino, sin lógica duplicada.
+
+**El único caso que rompía esta regla — y el bug real que apareció al probarlo**: los
+`<dialog>` nativos se cierran solos (botón "Cancelar" con `value="cancel"`, tecla
+Escape) sin pasar por ningún JS propio. Se los detecta de forma genérica con un
+`MutationObserver` sobre el atributo `open` de cada diálogo (así no hace falta tocar
+cada `showModal()`/`close()` individual de los ~9 diálogos). La primera versión hacía
+que ese observer llamara a `requestBack()` al detectar el cierre — pero eso dispara
+`closeTopLayer()` de nuevo, que ya no encuentra el diálogo (recién se cerró) y pasa a
+cerrar **la capa de abajo por error** (por ejemplo, la cámara o la carpeta), sin que
+el usuario lo haya pedido. Encontrado probando "cerrar un diálogo con su Cancelar
+nativo, después mirar qué pasa" en el Browser pane. Se corrigió separando dos casos:
+si `closeTopLayer()` fue quien cerró el diálogo (gesto del sistema), un flag
+(`closingDialogFromHistory`) le dice al observer que no haga nada más; si el diálogo
+se cerró por su cuenta (botón propio), el observer sólo sincroniza el contador hacia
+atrás (`suppressNextPop` + `history.back()`) sin pedir un cierre adicional.
+
+**"Registros" (barra inferior) puede saltar varios niveles a la vez**: a diferencia
+de los demás botones (que cierran exactamente un nivel), tocar "Registros" desde
+varias carpetas anidadas o desde el editor de marcado tiene que volver directo al
+inicio. `history.go(-N)` consume todas esas entradas de una vez — comprobado que
+dispara un único evento `popstate` al llegar (no uno por cada nivel intermedio) — así
+que `goHome()` resincroniza el contador de inmediato y usa el mismo flag
+`suppressNextPop` para que ese único `popstate` no dispare un cierre adicional.
+
+**Verificado en el Browser pane** simulando el botón atrás con `history.back()` (que
+dispara el mismo evento `popstate` que usa el gesto/botón real de Android en una PWA
+instalada — mecanismo estándar de la plataforma, no específico de este código):
+- Dos niveles de subcarpeta → dos "atrás" del sistema → sube exactamente un nivel
+  cada uno.
+- Foto abierta dos carpetas adentro → un "atrás" → vuelve a la carpeta (el caso que
+  reportó el usuario), no cierra la app.
+- Cámara abierta → cambiar de lente/cámara (reopen) no suma profundidad → un "atrás"
+  → cierra la cámara y vuelve a la carpeta.
+- Editor de marcado → un "atrás" → vuelve al detalle de la foto → otro "atrás" →
+  vuelve a la carpeta.
+- Diálogo cerrado con su botón "Cancelar" nativo vs. cerrado con el gesto del sistema
+  → ambos caminos dejan el contador exactamente igual, sin cerrar nada de más.
+- "Registros" desde tres niveles de profundidad → un único evento `popstate`, sin
+  historial fantasma (confirmado: un "atrás" posterior en el home ya sale de la app,
+  como corresponde en la pantalla raíz).
+
+**Pendiente de confirmar por el usuario**: el mecanismo (`pushState`/`popstate`) es
+el estándar de la plataforma para este problema y se probó exhaustivamente disparando
+los mismos eventos que el sistema real dispara, pero la app no puede simular el gesto
+físico de Android ni el botón de navegación on-screen desde este entorno — falta que
+el usuario confirme en su teléfono.
+
+**Dónde vive**: `app.js`, bloque final antes de `init()` — `pushBackLayer()`,
+`requestBack()`, `closeTopLayer()`, el listener de `popstate`, y los
+`MutationObserver` por diálogo. Integrado en `openCameraFor()`, `flipCamera()`,
+`selectLens()`, `openDetail()`, `openEditorForPhoto()`, `goHome()`, y los botones que
+antes cerraban vistas directamente.

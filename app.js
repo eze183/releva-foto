@@ -257,7 +257,17 @@ function showFolderView() {
   $("#emptyState").hidden = photos.length > 0 || subfolders.length > 0;
   showView("folderView");
 }
-function goHome() { state.activeFolderId = null; renderHome(); showView("galleryView"); }
+// "Registros" en la barra inferior puede tocarse desde varios niveles de profundidad
+// a la vez (carpetas anidadas, marcando una foto) — hay que volver directo al inicio,
+// no de a un nivel. history.go(-N) consume todas esas entradas en un solo salto (un
+// único evento popstate al llegar), así que se resincroniza antes de que ese evento
+// llegue en vez de dejar que dispare closeTopLayer() paso a paso.
+function goHome() {
+  state.activeFolderId = null;
+  if (backDepth > 0) { suppressNextPop = true; history.go(-backDepth); backDepth = 0; }
+  renderHome();
+  showView("galleryView");
+}
 function refreshCurrentList() {
   if ($("#folderView").classList.contains("active")) showFolderView();
   else renderHome();
@@ -272,7 +282,7 @@ function goUpFromFolder() {
 // --- Cámara dentro de la app (getUserMedia): evita el cambio de app que en Android
 // hace que el sistema mate la página y se pierda la foto. Cae al input nativo si falla.
 // Modo ráfaga: cada disparo guarda la foto directo y la cámara queda abierta. ---
-async function openCameraFor(folderId) {
+async function openCameraFor(folderId, { reopen = false } = {}) {
   const folder = folderById(folderId);
   if (!folder) { showError("Elegí una carpeta antes de sacar fotos."); return; }
   state.captureFolderId = folder.id;
@@ -286,6 +296,11 @@ async function openCameraFor(folderId) {
     state.cameraZoom = 1;
     $("#cameraStream").srcObject = stream;
     $("#cameraOverlay").hidden = false;
+    // "reopen" es cerrar-y-volver-a-abrir por cambiar de cámara o de lente (mismo
+    // nivel de navegación, no una pantalla nueva) — no debe empujar otra entrada al
+    // historial, o el botón atrás del sistema necesitaría un toque extra por cada
+    // cambio de lente antes de cerrar la cámara de verdad.
+    if (!reopen) pushBackLayer();
     setupCameraZoom(stream);
     await refreshLensPicker();
   } catch (error) {
@@ -344,7 +359,7 @@ async function selectLens(deviceId) {
   const folderId = state.captureFolderId;
   const burst = state.burst;
   closeCamera();
-  await openCameraFor(folderId);
+  await openCameraFor(folderId, { reopen: true });
   state.burst = burst;
   renderBurst();
 }
@@ -451,7 +466,7 @@ async function flipCamera() {
   const folderId = state.captureFolderId;
   const burst = state.burst;
   closeCamera();
-  await openCameraFor(folderId);
+  await openCameraFor(folderId, { reopen: true });
   state.burst = burst;
   renderBurst();
 }
@@ -490,7 +505,7 @@ function renderDetailNote(photo) {
   node.textContent = photo.note || "Agregar una nota";
   node.classList.toggle("empty", !photo.note);
 }
-function openDetail(id) {
+function openDetail(id, { reopen = false } = {}) {
   const photo = state.photos.find((item) => item.id === id); if (!photo) return;
   state.activePhoto = photo;
   state.activeFolderId = photo.folderId;
@@ -500,6 +515,9 @@ function openDetail(id) {
   renderDetailNote(photo);
   $("#detailDate").textContent = formatDate(photo.createdAt);
   resetPhotoZoom();
+  // "reopen" es volver desde el editor de marcado a la MISMA foto (la capa de detalle
+  // ya estaba empujada al historial de antes) — no es una navegación nueva.
+  if (!reopen) pushBackLayer();
   showView("detailView");
 }
 
@@ -673,6 +691,7 @@ function openEditorForPhoto(photo) {
     state.selectedAnnotationId = null;
     deactivateTool();
     fullRedraw();
+    pushBackLayer();
     showView("editorView");
   };
   editorImage.onerror = () => { URL.revokeObjectURL(url); showError("No se pudo abrir la foto para marcarla."); };
@@ -852,7 +871,7 @@ $("#undoButton").onclick = () => {
 };
 $("#saveMarksButton").onclick = () => {
   const photo = state.editorPhoto;
-  if (!photo) { showView("detailView"); return; }
+  if (!photo) { requestBack(); return; }
   state.selectedAnnotationId = null;
   fullRedraw();
   canvas.toBlob(async (blob) => {
@@ -863,7 +882,7 @@ $("#saveMarksButton").onclick = () => {
       photo.marks = cloneAnnotations(state.annotations);
       await idbPutPhoto(photo);
       releaseUrl(photo.id);
-      openDetail(photo.id);
+      requestBack();
       toast("Marcas guardadas");
     } catch (error) {
       console.error(error);
@@ -877,9 +896,9 @@ document.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (action === "capture") requestCapture();
   if (action === "gallery") goHome();
-  if (action === "back") backToFolderOrHome();
-  if (action === "up") goUpFromFolder();
-  if (action === "cancel-marks") { if (state.editorPhoto) openDetail(state.editorPhoto.id); else backToFolderOrHome(); }
+  if (action === "back") requestBack();
+  if (action === "up") requestBack();
+  if (action === "cancel-marks") requestBack();
 
   const folderMenu = event.target.closest("[data-folder-menu]");
   if (folderMenu) { openFolderActions(folderMenu.dataset.folderMenu); return; }
@@ -888,7 +907,9 @@ document.addEventListener("click", (event) => {
     if (longPressTriggered) { longPressTriggered = false; return; }
     const id = folderOpen.dataset.folder;
     if (state.folderSelectMode) { toggleFolderSelection(id); return; }
-    state.activeFolderId = id; state.search = ""; $("#searchInput").value = ""; showFolderView(); return;
+    state.activeFolderId = id; state.search = ""; $("#searchInput").value = "";
+    pushBackLayer();
+    showFolderView(); return;
   }
   const card = event.target.closest(".photo-card");
   if (card) {
@@ -1247,7 +1268,7 @@ $("#deleteButton").onclick = async () => {
     releaseUrl(id);
     state.photos = state.photos.filter((item) => item.id !== id);
     state.activePhoto = null;
-    backToFolderOrHome();
+    requestBack();
   } catch (error) {
     console.error(error);
     showError("No se pudo eliminar la foto.");
@@ -1255,8 +1276,8 @@ $("#deleteButton").onclick = async () => {
 };
 
 $("#cameraShutter").onclick = capturePhoto;
-$("#cameraCancel").onclick = finishCamera;
-$("#cameraDone").onclick = finishCamera;
+$("#cameraCancel").onclick = requestBack;
+$("#cameraDone").onclick = requestBack;
 $("#cameraFlip").onclick = flipCamera;
 $("#cameraLens").onclick = openLensPicker;
 $("#importButton").onclick = () => $("#libraryInput").click();
@@ -1375,6 +1396,48 @@ $("#confirmExport").onclick = async () => {
     button.disabled = false;
   }
 };
+
+// --- Atrás del sistema (Android): sin usar la History API, cualquier pantalla
+// superpuesta (foto, cámara, editor de marcado, un diálogo, una subcarpeta) no deja
+// rastro en el historial del navegador — el gesto/botón atrás del sistema no tiene
+// nada que deshacer y cierra la PWA entera en vez de retroceder un paso adentro de la
+// app. Solución: cada nivel "hacia adentro" empuja una entrada de historial (misma
+// URL, sólo para tener algo que consumir); un único listener de popstate cierra lo
+// que corresponda según qué esté abierto en ese momento — sin importar si el gesto
+// vino del sistema o de un botón propio (X, Cancelar, subir de carpeta), porque los
+// botones propios pasan por requestBack() en vez de cerrar directo. No cubre el modo
+// de selección múltiple (mantener presionada una carpeta/foto) — queda para otra
+// sesión si hace falta.
+let backDepth = 0;
+let suppressNextPop = false;
+function pushBackLayer() { backDepth++; history.pushState({ backDepth }, ""); }
+function requestBack() { if (backDepth > 0) history.back(); }
+let closingDialogFromHistory = false;
+function closeTopLayer() {
+  const openDialog = [...document.querySelectorAll("dialog[open]")].pop();
+  if (openDialog) { closingDialogFromHistory = true; openDialog.close(); return; }
+  if (!$("#cameraOverlay").hidden) { finishCamera(); return; }
+  if ($("#editorView").classList.contains("active")) { if (state.editorPhoto) openDetail(state.editorPhoto.id, { reopen: true }); else backToFolderOrHome(); return; }
+  if ($("#detailView").classList.contains("active")) { backToFolderOrHome(); return; }
+  if (state.activeFolderId) goUpFromFolder();
+}
+window.addEventListener("popstate", (event) => {
+  const newDepth = (event.state && event.state.backDepth) || 0;
+  if (suppressNextPop) { suppressNextPop = false; backDepth = newDepth; return; }
+  if (newDepth < backDepth) { backDepth = newDepth; closeTopLayer(); } else { backDepth = newDepth; }
+});
+// Genérico para los ~10 <dialog> de la app: no hace falta tocar cada showModal()/
+// close() individual, sólo mirar cuándo cambia su atributo "open". Cuando el diálogo
+// se cierra por su cuenta (Cancelar, Escape, Guardar) la UI ya quedó cerrada — sólo
+// hay que sincronizar el contador hacia atrás, no pedirle a closeTopLayer() que
+// cierre "otra cosa" por encima (por eso es suppressNextPop, no requestBack()).
+document.querySelectorAll("dialog").forEach((dialog) => {
+  new MutationObserver(() => {
+    if (dialog.open) { pushBackLayer(); return; }
+    if (closingDialogFromHistory) { closingDialogFromHistory = false; return; }
+    if (backDepth > 0) { suppressNextPop = true; history.back(); }
+  }).observe(dialog, { attributes: true, attributeFilter: ["open"] });
+});
 
 (async function init() {
   await loadAll();
