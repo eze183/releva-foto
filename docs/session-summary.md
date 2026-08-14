@@ -497,3 +497,36 @@ amplía (nunca reduce por debajo de 1x), no había manera de recuperar lo recort
 franjas en el eje correspondiente. El clamp de paneo a escala máxima (4x) se probó
 matemáticamente en los dos ejes y en ambos sentidos (arriba/abajo, izquierda/derecha):
 cubre el recuadro sin pasarse hacia el vacío. Sin errores de consola.
+
+---
+
+## Sesión 12 — Visor de foto a pantalla completa (10/08/2026)
+
+**Disparador**: el usuario pidió que tocar una foto guardada la abra a pantalla
+completa, "tal cual funciona la app nativa o carpeta de fotos de Android". La sesión
+anterior había arreglado que la foto se viera completa (sin recortar), pero seguía
+confinada a un recuadro de 48vh dentro de una página con cabecera y texto — nunca
+ocupaba más que una fracción de la pantalla.
+
+**Se hizo**:
+- `#detailView` pasó de sección normal a superposición `position:fixed;inset:0` (mismo
+  patrón que `#cameraOverlay`), fondo negro, foto a pantalla completa. Selector por
+  ID (`#detailView.active`) para ganarle en especificidad a la regla genérica
+  `.view.active{display:block}` y poder usar `display:flex`.
+- Dos barras flotantes con degradé (no fondo sólido, para no robarle espacio a la
+  foto): arriba volver + eliminar; abajo carpeta/nombre/nota/fecha + "Marcar"/"Datos".
+- El formulario de editar nombre/nota se movió de un toggle inline (mostrar/ocultar
+  dentro de la página) a `<dialog id="photoEditDialog">`, mismo patrón que
+  `folderNoteDialog` — ya no hay espacio "de sobra" en la página para un formulario
+  inline una vez que la foto ocupa toda la pantalla.
+- El zoom por pellizco (`computePhotoContentBox()`/`clampPhotoZoom()`, sesión 11) no
+  necesitó ningún cambio: ya leía el tamaño real del recuadro en cada gesto, así que
+  automáticamente pasó a operar sobre el viewport completo.
+- Bump de `sw.js` a v26.
+
+**Resultado**: verificado en el Browser pane — el recuadro de la foto mide exactamente
+375×812 (el viewport completo) en vez de una fracción; tocar la nota abre el diálogo
+de edición con foco en el campo correcto, guardar cierra el diálogo y actualiza el
+nombre en la barra inferior; "Marcar" sigue abriendo el editor con la foto a
+resolución completa; "Volver" cierra la vista y regresa a la carpeta. Sin errores de
+consola.

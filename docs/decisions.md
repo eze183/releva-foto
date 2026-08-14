@@ -615,3 +615,52 @@ ejes.
 
 **Dónde vive**: `styles.css` — `.detail-image-wrap`, `.detail-image`. `app.js` —
 `computePhotoContentBox()`, `clampAxis()`, `clampPhotoZoom()`.
+
+---
+
+## 23. La vista de detalle es un visor de pantalla completa, no una página con la
+     foto arriba
+
+**Decisión**: `#detailView` pasa a ser una superposición `position:fixed;inset:0`
+(igual que `#cameraOverlay`) con fondo negro, foto a pantalla completa
+(`object-fit:contain`, ocupa el 100% del viewport) y dos barras flotantes con
+degradé (no fondo sólido) para los controles: arriba, volver + eliminar; abajo,
+carpeta/nombre/nota + fecha + "Marcar"/"Datos". La edición de nombre y nota se movió
+de un formulario inline (que se mostraba/ocultaba dentro de la página) a un
+`<dialog id="photoEditDialog">`, siguiendo el mismo patrón que `folderNoteDialog`.
+
+**Por qué**: el usuario pidió que tocar una foto la abra a pantalla completa, "tal
+cual funciona la app nativa o carpeta de fotos de Android". La vista anterior
+(decisión #22 arregló que la foto se viera completa, pero seguía confinada a un
+recuadro de 48vh dentro de una página con cabecera, botones y texto ocupando el resto
+de la pantalla) — el problema no era sólo el recorte, era que la foto nunca ocupaba
+más que una fracción de la pantalla.
+
+**Por qué barras con degradé y no fondo sólido**: un fondo sólido le resta espacio
+visible a la foto (exactamente el problema que se estaba resolviendo). El degradé deja
+la foto genuinamente a pantalla completa y mantiene el texto legible sobre cualquier
+color de foto gracias al negro que se intensifica hacia los bordes.
+
+**Por qué el formulario de edición pasó a diálogo**: con la foto ocupando toda la
+pantalla, ya no hay un lugar natural donde "abrir" un formulario inline sin tapar la
+imagen — antes ese espacio existía porque la foto sólo ocupaba 48vh. Moverlo a
+`<dialog>` (que ya es el patrón establecido para crear/editar en esta app) resuelve
+esto sin inventar un mecanismo nuevo.
+
+**Implementación notable**: `#detailView.active{position:fixed;...}` usa selector por
+ID para ganarle en especificidad a la regla genérica `.view.active{display:block}` —
+sin esto, la regla genérica pisaría el `display:flex` necesario para el layout de
+barras arriba/abajo. `position:fixed` funciona sin importar el anidamiento en el DOM
+porque nada en la cadena de padres (`.app-shell`, `<body>`) tiene `transform`, que es
+lo único que reancla `fixed` a un ancestro en vez de al viewport.
+
+**Consecuencia para el zoom por pellizco**: `computePhotoContentBox()` y
+`clampPhotoZoom()` (decisión #22) siguen funcionando sin cambios — ya leían el
+tamaño real de `#detailImageWrap` con `getBoundingClientRect()` en cada gesto, así que
+automáticamente empezaron a operar sobre el viewport completo en vez del recuadro de
+48vh, sin tocar una sola línea de esa lógica.
+
+**Dónde vive**: `index.html` — sección `#detailView`, diálogo `#photoEditDialog`.
+`styles.css` — bloque `#detailView.active`, `.detail-topbar`, `.detail-bottombar`,
+`.detail-pill-btn`. `app.js` — `openDetail()`, `openPhotoEdit()`, handlers de
+`#editButton`/`#detailNote`/`#editCancel`/`#editForm`.

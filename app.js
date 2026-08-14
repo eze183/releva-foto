@@ -499,7 +499,6 @@ function openDetail(id) {
   $("#detailFolder").textContent = folderPath(photo.folderId).join(" / ");
   renderDetailNote(photo);
   $("#detailDate").textContent = formatDate(photo.createdAt);
-  $("#editForm").hidden = true; $("#detailReadView").hidden = false;
   resetPhotoZoom();
   showView("detailView");
 }
@@ -1218,12 +1217,12 @@ function openPhotoEdit(focusNote) {
   $("#editName").value = photo.name;
   $("#editNote").value = photo.note || "";
   renderQuickNotes();
-  $("#detailReadView").hidden = true; $("#editForm").hidden = false;
+  $("#photoEditDialog").showModal();
   if (focusNote) setTimeout(() => $("#editNote").focus(), 50);
 }
 $("#editButton").onclick = () => openPhotoEdit(false);
 $("#detailNote").onclick = () => openPhotoEdit(true);
-$("#editCancel").onclick = () => { $("#editForm").hidden = true; $("#detailReadView").hidden = false; };
+$("#editCancel").onclick = () => $("#photoEditDialog").close();
 $("#editForm").onsubmit = async (event) => {
   event.preventDefault();
   const photo = state.activePhoto; if (!photo) return;
@@ -1233,7 +1232,7 @@ $("#editForm").onsubmit = async (event) => {
     await idbPutPhoto(photo);
     $("#detailName").textContent = photo.name;
     renderDetailNote(photo);
-    $("#editForm").hidden = true; $("#detailReadView").hidden = false;
+    $("#photoEditDialog").close();
     toast("Cambios guardados");
   } catch (error) {
     console.error(error);

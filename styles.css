@@ -88,7 +88,6 @@ dialog select{border:1px solid var(--line);background:var(--surface);padding:9px
 .search-field:focus-within{outline:2px solid var(--accent)}
 .results-label{font-size:10px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:var(--muted);margin:20px 0 0}
 .results-empty{color:var(--muted);font-size:.87rem;padding:30px 0;text-align:center}
-.detail-buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .dialog-hint{margin:0;color:var(--muted);font-size:.78rem;line-height:1.4}
 dialog textarea{border:1px solid var(--line);background:var(--bg);padding:9px 10px;font:inherit;font-size:.88rem;color:var(--ink);width:100%;margin-top:10px;resize:vertical}
 dialog textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0}
@@ -96,8 +95,8 @@ dialog textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0}
 .note-card svg{flex:none;color:var(--accent);margin-top:2px}
 .note-card.empty{border-left-color:var(--line);color:var(--muted);font-style:italic}
 .note-card.empty svg{color:var(--muted)}
-.detail-note{display:block;width:100%;text-align:left;border:0;background:transparent;font:inherit;line-height:1.55;color:color-mix(in srgb, var(--ink) 80%, transparent);padding:0;margin:0 0 10px;cursor:pointer;white-space:pre-wrap}
-.detail-note.empty{color:var(--accent);font-weight:700}
+.detail-note{display:block;width:100%;text-align:left;border:0;background:transparent;font:inherit;font-size:.85rem;line-height:1.5;color:#ffffffd9;padding:0;margin:4px 0 0;cursor:pointer;white-space:pre-wrap;max-height:4.5em;overflow:hidden}
+.detail-note.empty{color:#fff;font-weight:700;opacity:.85}
 .card-note{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:.72rem;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folder-open .card-note{color:color-mix(in srgb, var(--ink) 65%, transparent)}
 .note-flag{flex:none;color:var(--accent)}
@@ -114,17 +113,26 @@ dialog textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0}
 .action-sheet button.active{border-color:var(--accent);color:var(--accent-700)}
 .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink-900);color:#fff;font-size:.8rem;font-weight:700;padding:11px 18px;z-index:90;max-width:min(90vw,420px);text-align:center}
 .toast[hidden]{display:none}
-.detail-image-wrap{width:100%;height:48vh;overflow:hidden;background:var(--surface);border-bottom:2px solid var(--line);touch-action:none}
-/* contain, no cover: la foto tiene que verse completa por defecto, no recortada
-   para llenar el recuadro. El espacio sobrante (si la relación de aspecto de la
-   foto no coincide con la del recuadro) queda con el fondo de --surface. */
+/* Visor de foto a pantalla completa, como la galería nativa: la sección se sale del
+   flujo del app-shell con position:fixed (funciona sin importar el anidamiento en el
+   DOM, porque nada en el árbol de padres tiene transform) y la foto ocupa todo el
+   viewport. Los controles flotan encima en barras con degradé para quedar legibles
+   sobre cualquier foto, en vez de un fondo sólido que le robaría espacio a la imagen.
+   La especificidad de #id le gana a la regla genérica ".view.active{display:block}". */
+#detailView.active{position:fixed;inset:0;z-index:85;display:flex;flex-direction:column;background:#000}
+.detail-image-wrap{position:absolute;inset:0;background:#000;touch-action:none}
 .detail-image{width:100%;height:100%;object-fit:contain;display:block;transform-origin:0 0}
-.detail-content{padding:18px 4px}
-.detail-content h2{font-size:1.3rem;margin:12px 0 8px}
-.detail-content p{line-height:1.55;color:color-mix(in srgb, var(--ink) 80%, transparent)}
-.detail-content small{color:var(--muted)}
-.detail-actions{display:flex;align-items:center;gap:14px}
-.folder-pill{display:inline-flex;align-items:center;border:1px solid var(--accent);color:var(--accent);font-size:.68rem;letter-spacing:.02em;padding:3px 10px}
+.detail-topbar{position:relative;z-index:2;display:flex;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 14px 34px;background:linear-gradient(to bottom, #000000b3, transparent);pointer-events:none}
+.detail-topbar > *{pointer-events:auto}
+.detail-bottombar{position:relative;z-index:2;margin-top:auto;padding:34px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top, #000000cc, transparent);pointer-events:none}
+.detail-bottombar > *{pointer-events:auto}
+.detail-bottombar h2{color:#fff;font-size:1.15rem;margin:6px 0 0}
+.detail-bottombar-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:10px}
+.detail-bottombar-row small{color:#ffffffa6;font-size:.72rem;flex:none}
+.detail-actions{display:flex;gap:8px}
+.detail-pill-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:#ffffff26;color:#fff;font:inherit;font-weight:800;font-size:.76rem;padding:8px 12px;cursor:pointer}
+.detail-pill-btn:active{background:#ffffff42}
+.folder-pill{display:inline-flex;align-items:center;border:1px solid var(--accent);color:#fff;background:#ec301333;font-size:.68rem;letter-spacing:.02em;padding:3px 10px}
 dialog{border:0;padding:20px;width:min(90%,350px);box-shadow:0 12px 32px #2d2b2b38;background:var(--surface)}
 dialog::backdrop{background:color-mix(in srgb, var(--ink-900) 50%, transparent)}
 dialog h3{margin:0 0 10px;font-family:"Archivo",sans-serif;font-weight:800;font-size:1.15rem}
