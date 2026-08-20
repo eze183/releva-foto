@@ -150,12 +150,23 @@ dialog input{margin-top:10px}
 .folder-card.selected{border-color:var(--accent);background:var(--accent-100)}
 .photo-card.selected{outline:3px solid var(--accent);outline-offset:-3px}
 #moveFolderList button,#photoTargetList button{width:100%;text-align:left;color:var(--ink);font-weight:600;font-size:.85rem;padding:4px}
-.folder-select-bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:620px;background:var(--ink-900);color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:70}
-.folder-select-bar[hidden]{display:none}
-.folder-select-bar span{font-size:.78rem;font-weight:700}
-.folder-select-actions{display:flex;flex-wrap:wrap;gap:10px 14px}
-.folder-select-actions button{border:0;background:transparent;color:#fff;font:inherit;font-weight:800;font-size:.78rem;cursor:pointer;padding:0}
-.folder-select-actions .delete-link{color:#ff8a70}
+/* Barra de selección múltiple: dos filas, como el "contextual action mode" de
+   Android. Arriba, cerrar + cuántas hay + seleccionar todo; abajo, las acciones como
+   íconos con etiqueta (mismo lenguaje visual que la barra de la cámara y la nav
+   inferior), no como enlaces de texto sueltos. */
+.select-bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:620px;background:var(--ink-900);color:#fff;z-index:70;box-shadow:0 -8px 28px #2d2b2b40}
+.select-bar[hidden]{display:none}
+.select-bar-head{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #ffffff1f}
+.select-bar-head span{flex:1;min-width:0;font-size:.85rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.select-close{flex:none;width:34px;height:34px;border:0;background:#ffffff1f;color:#fff;display:grid;place-items:center;cursor:pointer}
+.select-close:active{background:#ffffff38}
+.select-all-btn{flex:none;border:0;background:transparent;color:#fff;font:inherit;font-weight:800;font-size:.75rem;cursor:pointer;padding:6px 4px;opacity:.85}
+.select-all-btn:active{opacity:1;color:var(--accent)}
+.select-bar-actions{display:flex;justify-content:space-around;padding:8px 6px calc(10px + env(safe-area-inset-bottom))}
+.select-bar-actions button{flex:1;border:0;background:transparent;color:#fff;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;cursor:pointer}
+.select-bar-actions button:active{background:#ffffff14}
+.select-bar-actions small{font-size:.63rem;font-weight:800}
+.select-bar-actions .danger{color:#ff8a70}
 .folder-manage-actions{display:flex;gap:6px}
 .folder-manage-actions button{font-size:1.1rem}
 .camera-overlay{position:fixed;inset:0;z-index:80;background:#000;display:flex;flex-direction:column}

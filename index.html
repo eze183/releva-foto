@@ -244,6 +244,7 @@
       <form method="dialog">
         <h3 id="folderActionsTitle">Carpeta</h3>
         <ul class="action-sheet">
+          <li><button type="button" data-folder-action="export">Exportar (con subcarpetas)</button></li>
           <li><button type="button" data-folder-action="note">Nota de la carpeta</button></li>
           <li><button type="button" data-folder-action="rename">Renombrar</button></li>
           <li><button type="button" data-folder-action="sub">Crear subcarpeta</button></li>
@@ -296,22 +297,51 @@
       </form>
     </dialog>
 
-    <div id="folderSelectBar" class="folder-select-bar" hidden>
-      <span id="folderSelectCount">0 carpetas seleccionadas</span>
-      <div class="folder-select-actions">
-        <button type="button" id="folderSelectMove">Mover a...</button>
-        <button type="button" id="folderSelectDelete" class="delete-link">Eliminar</button>
-        <button type="button" id="folderSelectCancel">Cancelar</button>
+    <div id="folderSelectBar" class="select-bar" hidden>
+      <div class="select-bar-head">
+        <button type="button" id="folderSelectCancel" class="select-close" aria-label="Salir de la selección">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <span id="folderSelectCount">0 seleccionadas</span>
+        <button type="button" id="folderSelectAll" class="select-all-btn">Seleccionar todo</button>
+      </div>
+      <div class="select-bar-actions">
+        <button type="button" id="folderSelectExport">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <small>Exportar</small>
+        </button>
+        <button type="button" id="folderSelectMove">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><polyline points="12 11 15 14 12 17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          <small>Mover</small>
+        </button>
+        <button type="button" id="folderSelectDelete" class="danger">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          <small>Eliminar</small>
+        </button>
       </div>
     </div>
 
-    <div id="photoSelectBar" class="folder-select-bar" hidden>
-      <span id="photoSelectCount">0 fotos seleccionadas</span>
-      <div class="folder-select-actions">
-        <button type="button" id="photoSelectMove">Mover a...</button>
-        <button type="button" id="photoSelectCopy">Copiar a...</button>
-        <button type="button" id="photoSelectDelete" class="delete-link">Eliminar</button>
-        <button type="button" id="photoSelectCancel">Cancelar</button>
+    <div id="photoSelectBar" class="select-bar" hidden>
+      <div class="select-bar-head">
+        <button type="button" id="photoSelectCancel" class="select-close" aria-label="Salir de la selección">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <span id="photoSelectCount">0 seleccionadas</span>
+        <button type="button" id="photoSelectAll" class="select-all-btn">Seleccionar todo</button>
+      </div>
+      <div class="select-bar-actions">
+        <button type="button" id="photoSelectMove">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><polyline points="12 11 15 14 12 17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          <small>Mover</small>
+        </button>
+        <button type="button" id="photoSelectCopy">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <small>Copiar</small>
+        </button>
+        <button type="button" id="photoSelectDelete" class="danger">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          <small>Eliminar</small>
+        </button>
       </div>
     </div>
 

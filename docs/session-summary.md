@@ -579,3 +579,48 @@ sincronizan igual, sin cierres de más; "Registros" desde tres niveles de profun
 adicional en el home ya sale de la app, correcto en la pantalla raíz). Sin errores de
 consola. Bump de `sw.js` a v27. **Pendiente**: confirmar en un teléfono real con el
 gesto/botón físico de Android, no simulable desde este entorno.
+
+---
+
+## Sesión 14 — Barra de selección rediseñada y exportación recursiva (10/08/2026)
+
+**Disparador**: dos pedidos del usuario. (1) El menú que aparece al mantener
+presionada una carpeta "es muy simple y no se ve muy desarrollado". (2) "Si una
+carpeta contiene otras subcarpetas adentro, que se descarguen todas juntas — hoy debo
+exportar una por una".
+
+**Causa de (2)**: el diálogo de exportación listaba las carpetas en jerarquía pero
+con checkboxes independientes, y `confirmExport` filtraba por coincidencia exacta de
+`folderId`. Tildar "Manzana 3" bajaba sólo sus fotos directas; las de
+"Manzana 3 / Vivienda 1" quedaban afuera sin ningún aviso, aunque la lista sugería lo
+contrario.
+
+**Se hizo**:
+- **Exportación recursiva por tres vías**: menú ⋮ → "Exportar (con subcarpetas)"
+  (directo, sin diálogo); acción "Exportar" en la barra de selección; y en el diálogo,
+  tildar una carpeta arrastra a todas sus subcarpetas, con etiquetas que ahora dicen
+  "1 + 3 en subcarpetas". Se dejó a propósito el filtro exacto en `confirmExport`
+  (el cascadeo ocurre al tildar) para que siga siendo posible destildar una subcarpeta
+  puntual con el padre tildado.
+- **Barra de selección rediseñada** al estilo del "contextual action mode" de Android:
+  dos filas — cerrar (✕) + contador + "Seleccionar todo"/"Quitar todo" arriba;
+  acciones como íconos con etiqueta abajo. "Todo" se lee del DOM (`.view.active`) para
+  que coincida siempre con lo que hay en pantalla, incluida la búsqueda filtrada.
+- **El modo selección entró al sistema de historial** (la sesión 13 lo había dejado
+  explícitamente afuera): el gesto atrás ahora sale de la selección sin salir de la
+  carpeta, usando el mismo par de banderas que ya tenían los diálogos.
+- Bump de `sw.js` a v28.
+
+**Resultado**: verificado en el Browser pane con jerarquía de tres niveles
+(Manzana 3 > Vivienda 1 > Baño). Exportar "Manzana 3" desde el ⋮ trae las 4 fotos de
+los tres niveles con la jerarquía intacta en el zip; el cascadeo de checkboxes
+funciona en ambos sentidos y destildar sólo una subcarpeta no toca a los padres;
+exportar desde la barra sale del modo selección y deja `backDepth` en 0; el atrás del
+sistema sale de la selección y un segundo atrás sí sube de carpeta. Sin errores de
+consola.
+
+**Nota de arnés (ya vista en la sesión 7, vuelve a aparecer)**: los `.click()`
+sintéticos sin `pointerdown` previo dejan colgada la bandera `longPressTriggered` y
+hacen que el siguiente toque se trague — es artefacto de la prueba, no bug (un toque
+real dispara `pointerdown` primero, que la resetea). Las pruebas de selección múltiple
+necesitan simular el toque completo.

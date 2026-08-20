@@ -264,6 +264,11 @@ function showFolderView() {
 // llegue en vez de dejar que dispare closeTopLayer() paso a paso.
 function goHome() {
   state.activeFolderId = null;
+  // history.go(-N) también consume la capa del modo selección si estaba activo, así
+  // que se limpia su estado acá en vez de dejar la barra colgada sobre el inicio.
+  state.folderSelection.clear(); state.folderSelectMode = false;
+  state.photoSelection.clear(); state.photoSelectMode = false;
+  renderFolderSelectBar(); renderPhotoSelectBar();
   if (backDepth > 0) { suppressNextPop = true; history.go(-backDepth); backDepth = 0; }
   renderHome();
   showView("galleryView");
@@ -959,22 +964,53 @@ document.addEventListener("pointermove", (e) => { if (longPressStartPos && Math.
 function toggleFolderSelection(id) {
   if (state.folderSelection.has(id)) state.folderSelection.delete(id); else state.folderSelection.add(id);
   if (state.folderSelection.size === 0) { exitFolderSelectMode(); return; }
-  state.folderSelectMode = true;
+  // El modo selección es una capa más para el atrás del sistema: entrar en él empuja
+  // una entrada de historial, así el gesto atrás sale de la selección en vez de
+  // cerrar la pantalla (o la app) que hay debajo.
+  if (!state.folderSelectMode) { state.folderSelectMode = true; pushBackLayer(); }
   renderFolderSelectBar();
   refreshCurrentList();
 }
+// "Todo" es lo que está en pantalla en este momento (las carpetas del nivel abierto,
+// o los resultados de la búsqueda), no todas las carpetas de la app — leerlo del DOM
+// hace que coincida siempre con lo que el usuario ve, sin duplicar la lógica de qué
+// se está mostrando.
+function visibleFolderIds() { return [...document.querySelectorAll(".view.active [data-folder]")].map((el) => el.dataset.folder); }
+function visiblePhotoIds() { return [...document.querySelectorAll(".view.active .photo-card")].map((el) => el.dataset.id); }
 function renderFolderSelectBar() {
   const n = state.folderSelection.size;
   $("#folderSelectBar").hidden = !state.folderSelectMode;
   $("#folderSelectCount").textContent = `${n} ${n === 1 ? "carpeta seleccionada" : "carpetas seleccionadas"}`;
+  const visible = visibleFolderIds();
+  const allSelected = visible.length > 0 && visible.every((id) => state.folderSelection.has(id));
+  $("#folderSelectAll").textContent = allSelected ? "Quitar todo" : "Seleccionar todo";
+}
+// Igual que con los <dialog>: salir de la selección puede venir del gesto atrás (y
+// entonces la entrada de historial ya se consumió) o de un botón propio / del final
+// de una acción en lote (y entonces hay que consumirla sin disparar otro cierre).
+let closingSelectionFromHistory = false;
+function syncSelectionExit() {
+  if (closingSelectionFromHistory) { closingSelectionFromHistory = false; return; }
+  if (backDepth > 0) { suppressNextPop = true; history.back(); }
 }
 function exitFolderSelectMode() {
+  const wasActive = state.folderSelectMode;
   state.folderSelection.clear();
   state.folderSelectMode = false;
   renderFolderSelectBar();
   refreshCurrentList();
+  if (wasActive) syncSelectionExit();
 }
-$("#folderSelectCancel").onclick = exitFolderSelectMode;
+$("#folderSelectCancel").onclick = () => requestBack();
+$("#folderSelectAll").onclick = () => {
+  const visible = visibleFolderIds();
+  const allSelected = visible.length > 0 && visible.every((id) => state.folderSelection.has(id));
+  if (allSelected) { requestBack(); return; }
+  visible.forEach((id) => state.folderSelection.add(id));
+  renderFolderSelectBar();
+  refreshCurrentList();
+};
+$("#folderSelectExport").onclick = () => exportFolders([...state.folderSelection]);
 $("#folderSelectDelete").onclick = async () => {
   const ids = [...state.folderSelection];
   if (!ids.length) return;
@@ -1008,7 +1044,7 @@ async function moveSelectedFoldersTo(targetId) {
 function togglePhotoSelection(id) {
   if (state.photoSelection.has(id)) state.photoSelection.delete(id); else state.photoSelection.add(id);
   if (state.photoSelection.size === 0) { exitPhotoSelectMode(); return; }
-  state.photoSelectMode = true;
+  if (!state.photoSelectMode) { state.photoSelectMode = true; pushBackLayer(); }
   renderPhotoSelectBar();
   refreshCurrentList();
 }
@@ -1016,14 +1052,27 @@ function renderPhotoSelectBar() {
   const n = state.photoSelection.size;
   $("#photoSelectBar").hidden = !state.photoSelectMode;
   $("#photoSelectCount").textContent = `${n} ${n === 1 ? "foto seleccionada" : "fotos seleccionadas"}`;
+  const visible = visiblePhotoIds();
+  const allSelected = visible.length > 0 && visible.every((id) => state.photoSelection.has(id));
+  $("#photoSelectAll").textContent = allSelected ? "Quitar todo" : "Seleccionar todo";
 }
 function exitPhotoSelectMode() {
+  const wasActive = state.photoSelectMode;
   state.photoSelection.clear();
   state.photoSelectMode = false;
   renderPhotoSelectBar();
   refreshCurrentList();
+  if (wasActive) syncSelectionExit();
 }
-$("#photoSelectCancel").onclick = exitPhotoSelectMode;
+$("#photoSelectCancel").onclick = () => requestBack();
+$("#photoSelectAll").onclick = () => {
+  const visible = visiblePhotoIds();
+  const allSelected = visible.length > 0 && visible.every((id) => state.photoSelection.has(id));
+  if (allSelected) { requestBack(); return; }
+  visible.forEach((id) => state.photoSelection.add(id));
+  renderPhotoSelectBar();
+  refreshCurrentList();
+};
 $("#photoSelectDelete").onclick = async () => {
   const ids = [...state.photoSelection];
   if (!ids.length) return;
@@ -1133,6 +1182,7 @@ function runFolderAction(action) {
   const folder = folderById(id);
   $("#folderActionsDialog").close();
   if (!folder) return;
+  if (action === "export") { exportFolders([id]); return; }
   if (action === "note") { openFolderNoteDialog(id); return; }
   if (action === "sub") { openFolderCreateDialog(id); return; }
   if (action === "rename") { renameFolder(id); return; }
@@ -1362,10 +1412,54 @@ async function shareOrDownload(blob, fileName) {
 function renderExportFolderList() {
   $("#exportFolderList").innerHTML = orderedFolders()
     .map(({ folder, depth }) => {
-      const count = photosIn(folder.id).length;
-      return `<li><label><input type="checkbox" value="${esc(folder.id)}" checked> ${indent(depth)}${esc(folder.name)} <small>${count} ${count === 1 ? "foto" : "fotos"}</small></label></li>`;
+      const own = photosIn(folder.id).length;
+      const total = countPhotosRecursive(folder.id);
+      const label = total === own ? `${own} ${own === 1 ? "foto" : "fotos"}` : `${own} + ${total - own} en subcarpetas`;
+      return `<li><label><input type="checkbox" value="${esc(folder.id)}" checked> ${indent(depth)}${esc(folder.name)} <small>${label}</small></label></li>`;
     })
     .join("");
+}
+// Tildar una carpeta arrastra a todas sus subcarpetas. Antes había que tildarlas una
+// por una: al exportar una carpeta con subcarpetas adentro salía sólo el primer nivel
+// y parecía que faltaban fotos.
+$("#exportFolderList").addEventListener("change", (event) => {
+  const box = event.target.closest("input[type=checkbox]");
+  if (!box) return;
+  const affected = new Set(descendantIds(box.value));
+  if (!affected.size) return;
+  [...$("#exportFolderList").querySelectorAll("input[type=checkbox]")].forEach((other) => {
+    if (affected.has(other.value)) other.checked = box.checked;
+  });
+});
+function photosUnder(folderIds) {
+  const all = new Set(folderIds.flatMap((id) => [id, ...descendantIds(id)]));
+  return state.photos.filter((photo) => all.has(photo.folderId));
+}
+async function runExport(photos, scopeName) {
+  const button = $("#exportButton");
+  button.disabled = true;
+  toast(`Preparando ${photos.length} ${photos.length === 1 ? "foto" : "fotos"}...`, true);
+  try {
+    const blob = await buildExportZip(photos);
+    const stamp = new Date().toISOString().slice(0, 10);
+    await shareOrDownload(blob, `releva-foto_${scopeName}_${stamp}.zip`);
+    toast(`${photos.length} ${photos.length === 1 ? "foto exportada" : "fotos exportadas"}`);
+  } catch (error) {
+    console.error(error);
+    showError("No se pudo generar la exportación.");
+  } finally {
+    button.disabled = false;
+  }
+}
+// Exporta las carpetas dadas **con todo su contenido anidado**, sin pasar por el
+// diálogo: es el camino directo desde el menú ⋮ y desde la barra de selección.
+async function exportFolders(ids) {
+  if (!ids.length) return;
+  const photos = photosUnder(ids);
+  if (!photos.length) { showError("Esa selección no tiene fotos para exportar."); return; }
+  const scope = ids.length === 1 ? sanitizeFileName(folderById(ids[0])?.name) : "seleccion";
+  if (state.folderSelectMode) exitFolderSelectMode();
+  await runExport(photos, scope);
 }
 $("#exportButton").onclick = () => {
   if (!state.photos.length) { showError("Todavía no hay fotos para exportar."); return; }
@@ -1382,19 +1476,8 @@ $("#confirmExport").onclick = async () => {
   const photos = state.photos.filter((photo) => selectedIds.includes(photo.folderId));
   if (!photos.length) { showError("No hay fotos para exportar en esa selección."); return; }
   $("#exportDialog").close();
-  const button = $("#exportButton");
-  button.disabled = true;
-  try {
-    const blob = await buildExportZip(photos);
-    const stamp = new Date().toISOString().slice(0, 10);
-    const scopeName = selectedIds.length === state.folders.length ? "todo" : selectedIds.length === 1 ? sanitizeFileName(folderById(selectedIds[0])?.name) : "seleccion";
-    await shareOrDownload(blob, `releva-foto_${scopeName}_${stamp}.zip`);
-  } catch (error) {
-    console.error(error);
-    showError("No se pudo generar la exportación.");
-  } finally {
-    button.disabled = false;
-  }
+  const scopeName = selectedIds.length === state.folders.length ? "todo" : selectedIds.length === 1 ? sanitizeFileName(folderById(selectedIds[0])?.name) : "seleccion";
+  await runExport(photos, scopeName);
 };
 
 // --- Atrás del sistema (Android): sin usar la History API, cualquier pantalla
@@ -1416,6 +1499,10 @@ let closingDialogFromHistory = false;
 function closeTopLayer() {
   const openDialog = [...document.querySelectorAll("dialog[open]")].pop();
   if (openDialog) { closingDialogFromHistory = true; openDialog.close(); return; }
+  // La selección múltiple se abre por encima de la pantalla que la originó, así que
+  // el atrás tiene que salir de la selección antes de tocar esa pantalla.
+  if (state.folderSelectMode) { closingSelectionFromHistory = true; exitFolderSelectMode(); return; }
+  if (state.photoSelectMode) { closingSelectionFromHistory = true; exitPhotoSelectMode(); return; }
   if (!$("#cameraOverlay").hidden) { finishCamera(); return; }
   if ($("#editorView").classList.contains("active")) { if (state.editorPhoto) openDetail(state.editorPhoto.id, { reopen: true }); else backToFolderOrHome(); return; }
   if ($("#detailView").classList.contains("active")) { backToFolderOrHome(); return; }

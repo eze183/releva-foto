@@ -79,8 +79,8 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
 - [x] **El botón/gesto "Atrás" de Android navega dentro de la app, no la cierra**:
       visor de foto, cámara, editor de marcado, subcarpetas y todos los diálogos
       dejan una entrada propia en el historial (`pushState`/`popstate`), así que el
-      atrás del sistema retrocede un paso adentro de la app en vez de salir. No
-      cubre el modo de selección múltiple (mantener presionada una carpeta/foto).
+      atrás del sistema retrocede un paso adentro de la app en vez de salir. Incluye
+      el modo de selección múltiple (sale de la selección sin salir de la carpeta).
       Verificado disparando los mismos eventos `popstate` que usa la plataforma;
       falta confirmar con el gesto/botón físico en un teléfono real.
 - [x] **Visor de foto a pantalla completa**, como la galería nativa de Android: tocar
@@ -93,11 +93,17 @@ marcado diferido, carpetas con id propio y menú ⋮, buscador)._
       dentro del recuadro para no dejar panear hacia una franja vacía. Implementado a
       mano porque el pinch-zoom nativo de la página queda deshabilitado al correr la
       app instalada como PWA (ver `docs/decisions.md`).
-- [x] Selección múltiple de fotos dentro de una carpeta (mantener presionada una):
-      mover, copiar o eliminar varias a la vez.
-- [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) con selección de qué carpetas
-      incluir (checkboxes, todas tildadas por defecto) — respeta la **jerarquía real
-      de subcarpetas** en las rutas del zip y agrega un `registro.csv`. Comparte vía `navigator.share` si está disponible, si
+- [x] Selección múltiple (mantener presionada una carpeta o foto) con una barra de
+      dos filas al estilo del "contextual action mode" de Android: cerrar + contador
+      + "Seleccionar todo" arriba, acciones como íconos con etiqueta abajo
+      (carpetas: exportar, mover, eliminar; fotos: mover, copiar, eliminar). El
+      gesto atrás sale de la selección sin salir de la carpeta.
+- [x] Exportar a `.zip` (JSZip vendorizado, sin CDN) — respeta la **jerarquía real
+      de subcarpetas** en las rutas del zip y agrega un `registro.csv`. **Exportar
+      una carpeta incluye todo su contenido anidado**: desde el menú ⋮ ("Exportar
+      con subcarpetas"), desde la barra de selección múltiple, o desde el diálogo,
+      donde tildar una carpeta arrastra a todas sus subcarpetas y cada línea indica
+      cuántas fotos suma en ellas. Comparte vía `navigator.share` si está disponible, si
       no descarga directo.
 - [x] PWA instalable: manifest con íconos propios (generados con
       `scripts/generate-icons.js`, sin dependencias), service worker con

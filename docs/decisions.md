@@ -753,3 +753,74 @@ el usuario confirme en su teléfono.
 `MutationObserver` por diálogo. Integrado en `openCameraFor()`, `flipCamera()`,
 `selectLens()`, `openDetail()`, `openEditorForPhoto()`, `goHome()`, y los botones que
 antes cerraban vistas directamente.
+
+---
+
+## 25. Exportar una carpeta se lleva sus subcarpetas; la barra de selección es un
+     "contextual action mode"
+
+**Decisión (exportación)**: exportar una carpeta incluye **todo su contenido
+anidado**, no sólo sus fotos directas. Se agregó por tres vías:
+- Menú ⋮ de la carpeta → "Exportar (con subcarpetas)", que arma el zip sin pasar por
+  el diálogo (camino directo, un toque).
+- Barra de selección múltiple → acción "Exportar" (varias carpetas a la vez).
+- En el diálogo de exportación, tildar una carpeta **arrastra a todas sus
+  subcarpetas** (`change` delegado que cascadea sobre `descendantIds()`), y cada línea
+  ahora dice cuántas fotos propias tiene y cuántas suma en subcarpetas
+  ("1 + 3 en subcarpetas").
+
+**Por qué**: el usuario reportó que tenía que exportar "una por una". La causa: el
+diálogo listaba las carpetas en jerarquía pero los checkboxes eran independientes, y
+`confirmExport` filtraba por `photo.folderId ∈ seleccionadas` — coincidencia exacta,
+sin descendientes. Tildar "Manzana 3" bajaba sólo sus fotos directas y las de
+"Manzana 3 / Vivienda 1" quedaban afuera, sin ningún aviso de que faltaban. Peor: la
+jerarquía visible en la lista sugería lo contrario.
+
+**Se mantuvo la coincidencia exacta en `confirmExport`** (no se cascadea al momento de
+exportar) **a propósito**: el cascadeo ocurre al tildar, así que lo que se exporta es
+siempre exactamente lo que el usuario ve tildado. Si el cascadeo pasara al momento de
+exportar, destildar una subcarpeta puntual mientras el padre queda tildado sería
+imposible — y ese caso (bajar una manzana entera menos un baño) es legítimo.
+
+---
+
+**Decisión (barra de selección)**: la barra que aparece al mantener presionada una
+carpeta o foto pasó de una fila de enlaces de texto a un panel de dos filas, siguiendo
+el "contextual action mode" de Android: arriba, botón de cerrar (✕) + cuántos ítems
+hay seleccionados + "Seleccionar todo"/"Quitar todo"; abajo, las acciones como
+íconos con etiqueta, repartidos en el ancho (mismo lenguaje visual que la barra de la
+cámara y la navegación inferior).
+
+**Por qué**: el usuario lo describió como "muy simple y no se ve muy desarrollado".
+Además de lo visual, faltaban dos cosas funcionales que el patrón nativo sí tiene:
+seleccionar todo de una (antes había que tocar cada ítem) y salir con el gesto atrás.
+
+**"Todo" se lee del DOM, no del modelo** (`visibleFolderIds()`/`visiblePhotoIds()`
+consultan `.view.active`): así "Seleccionar todo" siempre coincide con lo que el
+usuario tiene en pantalla — las carpetas del nivel abierto, o los resultados de la
+búsqueda si está filtrando — sin duplicar en otra función la lógica de qué se está
+mostrando.
+
+**El modo selección es ahora una capa del historial** (completa la decisión #24, que
+lo había dejado explícitamente afuera): entrar empuja una entrada, y `closeTopLayer()`
+lo cierra **antes** que la pantalla de abajo, así el gesto atrás sale de la selección
+en vez de salir de la carpeta. Salir por cualquier otra vía (✕, "Quitar todo",
+terminar un borrado/movimiento/exportación) consume esa entrada con el mismo par de
+banderas que ya usaban los diálogos (`closingSelectionFromHistory` para "vino del
+historial, no toques nada más" / `suppressNextPop` para "consumí la entrada sin
+disparar otro cierre"). `goHome()` limpia el estado de selección a mano porque su
+`history.go(-N)` se lleva esa capa junto con todas las demás de un solo salto.
+
+**Nota sobre las pruebas**: los `.click()` sintéticos sin `pointerdown` previo dejan
+activa la bandera `longPressTriggered` y hacen que el siguiente toque se trague — es
+un artefacto del arnés, no un bug (un toque real siempre dispara `pointerdown`
+primero, que la resetea). Ya había pasado en la sesión 7; las pruebas de selección
+múltiple tienen que simular el toque completo.
+
+**Dónde vive**: `index.html` — `#folderSelectBar`/`#photoSelectBar` (nueva
+estructura), acción `export` en `#folderActionsDialog`. `styles.css` — bloque
+`.select-bar`. `app.js` — `visibleFolderIds()`, `visiblePhotoIds()`,
+`syncSelectionExit()`, `photosUnder()`, `runExport()`, `exportFolders()`, el
+listener `change` de `#exportFolderList`, y los cambios en `toggleFolderSelection()`,
+`togglePhotoSelection()`, `exitFolderSelectMode()`, `exitPhotoSelectMode()`,
+`closeTopLayer()` y `goHome()`.
